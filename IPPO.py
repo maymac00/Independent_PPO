@@ -41,7 +41,7 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
 class IPPO:
     summary_w = None
 
-    def __init__(self, args, run_name=None, env=None, envs=None):
+    def __init__(self, args, run_name=None, env=None):
         self.args = args
         if run_name is not None:
             self.run_name = run_name
@@ -76,7 +76,6 @@ class IPPO:
         #   Torch init
         self.device = set_torch(self.args.n_cpus, self.args.cuda)
         self.env = env
-        self.envs = envs
 
         if self.args.parallelize:
             main_process_threads = th.get_num_threads()
@@ -195,7 +194,7 @@ class IPPO:
                     batch_start_time = time.time()
                     batch_size = int(self.args.n_steps / self.args.max_steps)
 
-                    tasks = [(self.envs[i], d, i) for i in range(batch_size)]
+                    tasks = [(self.env, d, i) for i in range(batch_size)]
                     solved = 0
                     while solved < batch_size:
                         runs = min(self.args.n_envs, batch_size - solved)
@@ -206,6 +205,7 @@ class IPPO:
                         solved += runs
                         tasks = tasks[runs:]
 
+                    print("Batch time: ", time.time() - batch_start_time)
                     # Fetch the logs
                     for i in range(batch_size):
                         for tup in d[i]["logs"]:
@@ -221,7 +221,7 @@ class IPPO:
                     self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
                     self.metrics['reward_per_agent'] += [res["reward_per_agent"] for res in d.values()]
                     self.metrics['avg_reward'].appendleft(sum(self.metrics['reward_q']) / len(self.metrics['reward_q']))
-                    print("Batch time: ", time.time() - batch_start_time)
+
 
                 if self.args.verbose:
                     print(f"E: {self.metrics['ep_count']},\n\t "
@@ -526,11 +526,7 @@ if __name__ == "__main__":
 
     # Load environment parameters and create environment if needed
     env_params = config.parse_env_args()
-    envs = []
-    if args.parallelize:
-        for i in range(int(args.n_steps / args.max_steps)):
-            envs.append(gym.make(args.env, **vars(env_params)))
     env = gym.make(args.env, **vars(env_params))
 
-    ppo = IPPO(args, env=env, envs=envs)
+    ppo = IPPO(args, env=env)
     ppo.train()
