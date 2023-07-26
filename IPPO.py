@@ -180,7 +180,8 @@ class IPPO:
             if not self.args.parallelize:
                 sim_start = time.time()
                 self._sim()
-                print(f"Sim time: {time.time() - sim_start}")
+                if self.args.verbose:
+                    print(f"Sim time: {time.time() - sim_start}")
             else:
                 with Manager() as manager:
                     d = manager.dict()
@@ -198,8 +199,8 @@ class IPPO:
                         # Remove solved tasks
                         solved += runs
                         tasks = tasks[runs:]
-
-                    print("Batch time: ", time.time() - batch_start_time)
+                    if self.args.verbose:
+                        print("Batch time: ", time.time() - batch_start_time)
                     # Fetch the logs
                     for i in range(batch_size):
                         for tup in d[i]["logs"]:
@@ -539,8 +540,11 @@ class IPPO:
             os.makedirs(folder)
         else:
             folder = folder + "_ckpt"
-        print(f"Saving model in {folder}")
 
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        print(f"Saving model in {folder}")
 
         # Save the model
         for k in range(config.n_agents):
