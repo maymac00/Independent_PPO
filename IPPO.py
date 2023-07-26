@@ -1,6 +1,8 @@
+import copy
+import json
 import time
 from collections import deque
-from torch.multiprocessing import Process, Manager
+from torch.multiprocessing import Manager
 import torch.multiprocessing as mp
 import logging
 import numpy as np
@@ -17,15 +19,6 @@ import pickle
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
-
-
-def is_pickleable(obj):
-    try:
-        pickle.loads(pickle.dumps(obj))
-        return True
-    except Exception as e:
-        print(e)
-        return False
 
 
 def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, astype: Type = th.float32) -> Dict:
@@ -87,7 +80,8 @@ class IPPO:
             thld = main_process_threads - self.args.n_envs  # Number of threads to be used by the main process
             th.set_num_threads(thld)  # Set the number of threads to be used by the main process
             if self.args.n_envs < (self.args.n_steps / self.args.max_steps):
-                warnings.warn("Efficency is maximized when the number of parallelized environments is equal to n_steps/max_steps.")
+                warnings.warn(
+                    "Efficency is maximized when the number of parallelized environments is equal to n_steps/max_steps.")
 
             mp.set_start_method('spawn')
 
@@ -213,15 +207,13 @@ class IPPO:
                             IPPO.summary_w.add_scalar(k, v, x)
 
                     # Merge the results
-                    # TODO: Merge Buffers
                     for k in self.agents:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(self.args.n_envs)])
                     self.metrics['ep_count'] += self.args.n_envs
                     self.metrics['global_step'] += self.args.n_envs * self.args.max_steps
-                    self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
-                    self.metrics['reward_per_agent'] += [res["reward_per_agent"] for res in d.values()]
-                    self.metrics['avg_reward'].appendleft(sum(self.metrics['reward_q']) / len(self.metrics['reward_q']))
-
+                    # self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
+                    # self.metrics['reward_per_agent'] += [res["reward_per_agent"] for res in d.values()]
+                    # self.metrics['avg_reward'].appendleft(sum(self.metrics['reward_q']) / len(self.metrics['reward_q']))
 
                 if self.args.verbose:
                     print(f"E: {self.metrics['ep_count']},\n\t "
@@ -233,6 +225,13 @@ class IPPO:
             # TODO: Callbacks
             sps = int(self.metrics["global_step"] / (time.time() - self.metrics["start_time"]))
             if self.args.tb_log: self.summary_w.add_scalar('Training/SPS', sps, self.metrics["global_step"])
+            if self.metrics['ep_count'] % 1000 == 0: self.save_experiment_data(ckpt=True)
+            # if self.metrics['ep_count'] % 100 == 0: print(f"SPS: {sps}")
+
+        self._finish_training()
+
+    def _finish_training(self):
+        self.save_experiment_data()
 
     def _load_models_from_files(self, load_from_checkpoint):
         pass
@@ -513,6 +512,45 @@ class IPPO:
         cname = mp.current_process().name
         if self.args.verbose:
             print(f"{cname} Time: {time.time() - start_time}")
+
+    def save_experiment_data(self, folder=None, ckpt=False):
+        config = self.args
+        # Create new folder in to save the model using args.we, args.n_steps, args.tot_steps as name
+        if folder is None:
+            folder = f"{config.save_dir}/{config.tag}/{config.n_steps}_{config.tot_steps // config.max_steps}_{config.seed}"
+        # Check if folder's config file is the same as the current config
+        def diff_config(path):
+            if os.path.exists(path):
+                with open(path + "/config.json", "r") as f:
+                    old_config = json.load(f)
+                if old_config != vars(config):
+                    return True
+                return False
+            return False
+
+        num = 1
+        if not ckpt:
+            _folder = copy.copy(folder)
+            while diff_config(_folder):
+                # append a number to the folder name
+                _folder = folder + "_(" + str(num) + ")"
+                num += 1
+            folder = _folder
+            os.makedirs(folder)
+        else:
+            folder = folder + "_ckpt"
+        print(f"Saving model in {folder}")
+
+
+        # Save the model
+        for k in range(config.n_agents):
+            th.save(self.actor[k].state_dict(), folder + f"/actor_{k}.pth")
+            th.save(self.critic[k].state_dict(), folder + f"/critic_{k}.pth")
+
+        # Save the args as a json file
+        with open(folder + "/config.json", "w") as f:
+            json.dump(vars(config), f, indent=4)
+        return folder
 
     # TODO: Play from file
 
