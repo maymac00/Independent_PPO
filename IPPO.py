@@ -4,9 +4,7 @@ import time
 from collections import deque
 from torch.multiprocessing import Manager
 import torch.multiprocessing as mp
-import logging
-import numpy as np
-import torch as th
+
 import torch.nn as nn
 import torch.optim as optim
 import CommonsGame.envs.env
@@ -15,7 +13,6 @@ from utils.memory import Buffer, merge_buffers
 from utils.misc import *
 import config
 import gym
-import pickle
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -210,7 +207,7 @@ class IPPO:
                     # Merge the results
                     for k in self.agents:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(self.args.n_envs)])
-                    self.metrics['ep_count'] += self.args.n_envs
+                    self.metrics['ep_count'] += solved
                     self.metrics['global_step'] += self.args.n_envs * self.args.max_steps
                     # self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
                     # self.metrics['reward_per_agent'] += [res["reward_per_agent"] for res in d.values()]
@@ -305,13 +302,7 @@ class IPPO:
 
         observation = self.environment_reset()
         self.last_run = {
-            "greedy": 0,
             "reward_per_agent": []
-        }
-        info = {
-            "donationBox": 0,
-            "n": [0] * self.args.n_agents,
-            "donationBox_full": False,
         }
 
         action, logprob, s_value = [{k: 0 for k in self.agents} for _ in range(3)]
@@ -351,16 +342,6 @@ class IPPO:
 
             # Consider the metrics of the first agent, probably want an average of the two
             ep_reward += reward
-            if self.eval_mode and any(reward < -1):
-                # print("Negative reward agent " + str(np.argmin(reward)), " step ", step)
-                self.last_run["greedy"] += 1
-
-            if info['survival'] and info['donationBox_full'] and not job_done:
-                job_done = True
-                if self.args.tb_log: self.summary_w.add_scalar('Training/Job_Done',
-                                                               (step - np.floor(
-                                                                   step / self.args.max_steps) * self.args.max_steps),
-                                                               self.metrics["global_step"])
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
             done = _array_to_dict_tensor(self.agents, done, self.device)
@@ -444,6 +425,7 @@ class IPPO:
         env, result, env_id = tasks
         th.set_num_threads(1)
         data = {"global_step": self.metrics["global_step"], "logs": []}
+
         single_buffer = {k: Buffer(self.o_size, self.args.max_steps, self.args.max_steps, self.args.gamma,
                                    self.args.gae_lambda, self.device) for k in self.agents}
         start_time = time.time()
@@ -457,6 +439,7 @@ class IPPO:
 
         for step in range(self.args.max_steps):
             data["global_step"] += 1
+
             with th.no_grad():
                 for k in self.agents:
                     (
