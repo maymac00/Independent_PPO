@@ -226,7 +226,7 @@ class IPPO:
             sps = int(self.metrics["global_step"] / (time.time() - self.metrics["start_time"]))
             if self.args.tb_log: self.summary_w.add_scalar('Training/SPS', sps, self.metrics["global_step"])
             if self.metrics['ep_count'] % 1000 == 0: self.save_experiment_data(ckpt=True)
-            # if self.metrics['ep_count'] % 100 == 0: print(f"SPS: {sps}")
+            if self.metrics['ep_count'] % 1000 == 0: print(f"SPS: {sps}")
 
         self._finish_training()
 
@@ -536,9 +536,12 @@ class IPPO:
                 _folder = folder + "_(" + str(num) + ")"
                 num += 1
             folder = _folder
-            os.makedirs(folder)
         else:
             folder = folder + "_ckpt"
+
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
         print(f"Saving model in {folder}")
 
 

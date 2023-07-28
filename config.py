@@ -26,9 +26,9 @@ def parse_ppo_args():
     # Experiment
     parser.add_argument("--max-steps", type=int, default=500, help="Max n° of steps per episode")
     parser.add_argument("--n-steps", type=int, default=2500, help="Steps between policy updates")
-    parser.add_argument("--tot-steps", type=int, default=25000000, help="Total timesteps of the experiment")
-    parser.add_argument("--early-stop", type=float, default=25000000, help="Steps to stop the experiment early")
-    parser.add_argument("--save-dir", type=str, default="/mnt/beegfs/iiia/arnau_mayoral/Gathering_data",
+    parser.add_argument("--tot-steps", type=int, default=50000000, help="Total timesteps of the experiment")
+    parser.add_argument("--early-stop", type=float, default=50000000, help="Steps to stop the experiment early")
+    parser.add_argument("--save-dir", type=str, default="/Gathering_data",
                         help="Directory to save the model and metrics")
 
     parser.add_argument("--past-actions-memory", type=int, default=0, help="Number of past actions to remember")
