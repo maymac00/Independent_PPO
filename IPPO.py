@@ -4,9 +4,7 @@ import time
 from collections import deque
 from torch.multiprocessing import Manager
 import torch.multiprocessing as mp
-import logging
-import numpy as np
-import torch as th
+
 import torch.nn as nn
 import torch.optim as optim
 import CommonsGame.envs.env
@@ -15,7 +13,6 @@ from utils.memory import Buffer, merge_buffers
 from utils.misc import *
 import config
 import gym
-import pickle
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -34,8 +31,9 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
 class IPPO:
     summary_w = None
 
-    def __init__(self, args, run_name=None, env=None):
+    def __init__(self, args, run_name=None, env=None, env_params=None):
         self.args = args
+        self.env_params = env_params
         if run_name is not None:
             self.run_name = run_name
         else:
@@ -126,7 +124,7 @@ class IPPO:
         self.environment_setup()
         # set seed for training
         set_seeds(args.seed, self.args.th_deterministic)
-        IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args)
+        IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args, self.env_params)
 
         # Init actor-critic setup
         self.actor, self.critic, self.a_optim, self.c_optim, self.buffer = {}, {}, {}, {}, {}
@@ -180,7 +178,8 @@ class IPPO:
             if not self.args.parallelize:
                 sim_start = time.time()
                 self._sim()
-                print(f"Sim time: {time.time() - sim_start}")
+                if self.args.verbose:
+                    print(f"Sim time: {time.time() - sim_start}")
             else:
                 with Manager() as manager:
                     d = manager.dict()
@@ -198,8 +197,8 @@ class IPPO:
                         # Remove solved tasks
                         solved += runs
                         tasks = tasks[runs:]
-
-                    print("Batch time: ", time.time() - batch_start_time)
+                    if self.args.verbose:
+                        print("Batch time: ", time.time() - batch_start_time)
                     # Fetch the logs
                     for i in range(batch_size):
                         for tup in d[i]["logs"]:
@@ -209,7 +208,7 @@ class IPPO:
                     # Merge the results
                     for k in self.agents:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(self.args.n_envs)])
-                    self.metrics['ep_count'] += self.args.n_envs
+                    self.metrics['ep_count'] += solved
                     self.metrics['global_step'] += self.args.n_envs * self.args.max_steps
                     # self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
                     # self.metrics['reward_per_agent'] += [res["reward_per_agent"] for res in d.values()]
@@ -298,19 +297,13 @@ class IPPO:
                 nn.utils.clip_grad_norm_(self.critic[k].parameters(), self.args.max_grad_norm)
                 self.c_optim[k].step()
 
-    def _sim(self, render=False, masked=False, pause=0.01):
+    def _sim(self, render=True, masked=False, pause=0.01):
         if self.eval_mode:
             self.args.tb_log = False
 
         observation = self.environment_reset()
         self.last_run = {
-            "greedy": 0,
             "reward_per_agent": []
-        }
-        info = {
-            "donationBox": 0,
-            "n": [0] * self.args.n_agents,
-            "donationBox_full": False,
         }
 
         action, logprob, s_value = [{k: 0 for k in self.agents} for _ in range(3)]
@@ -350,16 +343,6 @@ class IPPO:
 
             # Consider the metrics of the first agent, probably want an average of the two
             ep_reward += reward
-            if self.eval_mode and any(reward < -1):
-                # print("Negative reward agent " + str(np.argmin(reward)), " step ", step)
-                self.last_run["greedy"] += 1
-
-            if info['survival'] and info['donationBox_full'] and not job_done:
-                job_done = True
-                if self.args.tb_log: self.summary_w.add_scalar('Training/Job_Done',
-                                                               (step - np.floor(
-                                                                   step / self.args.max_steps) * self.args.max_steps),
-                                                               self.metrics["global_step"])
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
             done = _array_to_dict_tensor(self.agents, done, self.device)
@@ -443,6 +426,7 @@ class IPPO:
         env, result, env_id = tasks
         th.set_num_threads(1)
         data = {"global_step": self.metrics["global_step"], "logs": []}
+
         single_buffer = {k: Buffer(self.o_size, self.args.max_steps, self.args.max_steps, self.args.gamma,
                                    self.args.gae_lambda, self.device) for k in self.agents}
         start_time = time.time()
@@ -456,6 +440,7 @@ class IPPO:
 
         for step in range(self.args.max_steps):
             data["global_step"] += 1
+
             with th.no_grad():
                 for k in self.agents:
                     (
@@ -544,7 +529,6 @@ class IPPO:
 
         print(f"Saving model in {folder}")
 
-
         # Save the model
         for k in range(config.n_agents):
             th.save(self.actor[k].state_dict(), folder + f"/actor_{k}.pth")
@@ -569,5 +553,5 @@ if __name__ == "__main__":
     env_params = config.parse_env_args()
     env = gym.make(args.env, **vars(env_params))
 
-    ppo = IPPO(args, env=env)
+    ppo = IPPO(args, env=env, env_params=env_params)
     ppo.train()
