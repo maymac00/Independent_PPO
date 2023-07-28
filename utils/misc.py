@@ -37,7 +37,7 @@ def set_torch(n_cpus: int, cuda: bool) -> th.device:
     return th.device("cuda" if th.cuda.is_available() and cuda else "cpu")
 
 
-def init_loggers(run_name: str, args: Dict[str, Union[int, float, List]]) -> Tuple[SummaryWriter, str]:
+def init_loggers(run_name: str, args: Dict[str, Union[int, float, List]], env_params: Dict[str, Union[int, float, List]]) -> Tuple[SummaryWriter, str]:
     summary_w, wandb_path = None, None
     '''
     if args.wandb_log:
@@ -56,6 +56,10 @@ def init_loggers(run_name: str, args: Dict[str, Union[int, float, List]]) -> Tup
         summary_w.add_text(
             "hyperparameters",
             "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        )
+        summary_w.add_text(
+            "Env parameters",
+            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(env_params).items()])),
         )
 
     return summary_w, wandb_path

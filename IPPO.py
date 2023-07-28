@@ -31,8 +31,9 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
 class IPPO:
     summary_w = None
 
-    def __init__(self, args, run_name=None, env=None):
+    def __init__(self, args, run_name=None, env=None, env_params=None):
         self.args = args
+        self.env_params = env_params
         if run_name is not None:
             self.run_name = run_name
         else:
@@ -123,7 +124,7 @@ class IPPO:
         self.environment_setup()
         # set seed for training
         set_seeds(args.seed, self.args.th_deterministic)
-        IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args)
+        IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args, self.env_params)
 
         # Init actor-critic setup
         self.actor, self.critic, self.a_optim, self.c_optim, self.buffer = {}, {}, {}, {}, {}
@@ -296,7 +297,7 @@ class IPPO:
                 nn.utils.clip_grad_norm_(self.critic[k].parameters(), self.args.max_grad_norm)
                 self.c_optim[k].step()
 
-    def _sim(self, render=False, masked=False, pause=0.01):
+    def _sim(self, render=True, masked=False, pause=0.01):
         if self.eval_mode:
             self.args.tb_log = False
 
@@ -553,5 +554,5 @@ if __name__ == "__main__":
     env_params = config.parse_env_args()
     env = gym.make(args.env, **vars(env_params))
 
-    ppo = IPPO(args, env=env)
+    ppo = IPPO(args, env=env, env_params=env_params)
     ppo.train()
