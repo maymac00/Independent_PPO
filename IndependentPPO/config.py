@@ -3,7 +3,7 @@
 """
 import argparse
 import json
-from utils.misc import str2bool
+from IndependentPPO.utils.misc import str2bool
 
 
 def parse_ppo_args():
@@ -92,7 +92,7 @@ def parse_env_args():
     parser.add_argument("--donation-capacity", type=float, default=5, help="Donation box capacity")
     parser.add_argument("--survival-threshold", type=float, default=10, help="Survival threshold")
     parser.add_argument("--partial-observability", type=str2bool, default=True, help="Activates partial observability")
-    parser.add_argument("--visual-radius", type=int, default=2, help="Radius of partial observability")
+    parser.add_argument("--visual-radius", type=int, default=3, help="Radius of partial observability")
     parser.add_argument("--apple-regen", type=float, default=0.005, help="Activates apple regeneration")
     parser.add_argument("--inequality-mode", type=str, default="loss", help="tie_break, loss")
     parser.add_argument("--map-size", type=str, default="small", help="tiny, small, big")

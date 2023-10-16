@@ -2,7 +2,6 @@ import argparse
 import os
 from typing import Tuple, Optional, Dict, Union, List, Type
 
-import gym
 import numpy as np
 import torch as th
 # import wandb

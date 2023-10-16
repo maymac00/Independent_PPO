@@ -2,10 +2,10 @@ from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ActionSelection import *
-from utils.misc import *
+from IndependentPPO.ActionSelection import *
+from IndependentPPO.utils.misc import *
 
-ACTIONS = [0, 1, 2, 3, 6, 8, 9]
+ACTIONS = [0, 1, 2, 3, 4, 5, 6]
 
 
 def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True):

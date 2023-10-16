@@ -7,15 +7,17 @@ import torch.multiprocessing as mp
 
 import torch.nn as nn
 import torch.optim as optim
-import CommonsGame.envs.env
-from agent import SoftmaxActor, Critic, ACTIONS
-from utils.memory import Buffer, merge_buffers
-from utils.misc import *
-import config
+from IndependentPPO.agent import SoftmaxActor, Critic, ACTIONS
+from IndependentPPO.utils.memory import Buffer, merge_buffers
+from IndependentPPO.utils.misc import *
+import IndependentPPO.config
 import gym
 import warnings
 
+# The MA environment does not follow the gym SA scheme so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+warnings.simplefilter(action='ignore', category=DeprecationWarning)
 
 
 def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, astype: Type = th.float32) -> Dict:
@@ -32,12 +34,19 @@ class IPPO:
     summary_w = None
 
     def __init__(self, args, run_name=None, env=None, env_params=None):
-        self.args = args
-        self.env_params = env_params
+        if type(args) is dict:
+            self.args = argparse.Namespace(**args)
+        else:
+            self.args = args
+        if type(env_params) is dict:
+            self.env_params = argparse.Namespace(**args)
+        else:
+            self.env_params = env_params
+
         if run_name is not None:
             self.run_name = run_name
         else:
-            self.run_name = f"{args.env}__{args.tag}__{args.seed}__{int(time.time())}__{np.random.randint(0, 100)}"
+            self.run_name = f"{self.args.env}__{self.args.tag}__{self.args.seed}__{int(time.time())}__{np.random.randint(0, 100)}"
         self.eval_mode = False
 
         # Action-Space
@@ -45,7 +54,7 @@ class IPPO:
         self.a_size = 7
 
         # Attributes
-        self.agents = range(args.n_agents)
+        self.agents = range(self.args.n_agents)
         self.metrics = {
             'global_step': 0,
             'ep_count': 0,
@@ -81,12 +90,12 @@ class IPPO:
                 warnings.warn(
                     "Efficency is maximized when the number of parallelized environments is equal to n_steps/max_steps.")
 
-            mp.set_start_method('spawn')
+            #mp.set_start_method('spawn')
 
     def environment_setup(self):
         if self.env is None:
             raise Exception("Environment not set")
-        obs = self.env.reset()
+        obs, info = self.env.reset()
         # Decentralized learning checks
         if isinstance(obs, list):
             if len(obs) != self.args.n_agents:
@@ -99,21 +108,21 @@ class IPPO:
         else:
             raise Exception("Observation is not a list neither an array.")
 
-        self.o_size = len(self.env.reset()[0]) + self.args.past_actions_memory
-        self.a_size = 7
+        self.o_size = self.env.observation_space.sample().shape[0]
+        self.a_size = self.env.action_space.n
         print(f"Observation space: {self.o_size}, Action space: {self.a_size}")
         # TODO: Set the action space, translate actions to env_actions
 
     def environment_reset(self, env=None):
         if env is None:
-            non_tensor_observation = self.env.reset()
+            non_tensor_observation, info = self.env.reset()
             if self.args.past_actions_memory > 0:
                 # TODO: Reset intial memory for the previous actions taken
                 pass
             observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
             return observation
         else:
-            non_tensor_observation = env.reset()
+            non_tensor_observation, info = env.reset()
             if self.args.past_actions_memory > 0:
                 # TODO: Reset intial memory for the previous actions taken
                 pass
@@ -123,7 +132,7 @@ class IPPO:
     def train(self, load_from_checkpoint=None, init_global_step=0):
         self.environment_setup()
         # set seed for training
-        set_seeds(args.seed, self.args.th_deterministic)
+        set_seeds(self.args.seed, self.args.th_deterministic)
         IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args, self.env_params)
 
         # Init actor-critic setup
@@ -154,7 +163,7 @@ class IPPO:
         # Reset Training metrics
         self.metrics = {
             'global_step': init_global_step,
-            'ep_count': init_global_step / args.max_steps,
+            'ep_count': init_global_step / self.args.max_steps,
             'start_time': time.time(),
             'reward_q': [],
             'reward_per_agent': [],
@@ -191,14 +200,14 @@ class IPPO:
                     solved = 0
                     while solved < batch_size:
                         runs = min(self.args.n_envs, batch_size - solved)
-                        print("Running ", runs, " tasks")
+                        # print("Running ", runs, " tasks")
                         with mp.Pool(runs) as p:
                             p.map(self._parallel_sim, tasks[:runs])
                         # Remove solved tasks
                         solved += runs
                         tasks = tasks[runs:]
                     if self.args.verbose:
-                        print("Batch time: ", time.time() - batch_start_time)
+                        pass # print("Batch time: ", time.time() - batch_start_time)
                     # Fetch the logs
                     for i in range(batch_size):
                         for tup in d[i]["logs"]:
@@ -208,24 +217,23 @@ class IPPO:
                     # Merge the results
                     for k in self.agents:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(self.args.n_envs)])
-                    self.metrics['ep_count'] += solved
-                    self.metrics['global_step'] += self.args.n_envs * self.args.max_steps
-                    # self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
-                    # self.metrics['reward_per_agent'] += [res["reward_per_agent"] for res in d.values()]
-                    # self.metrics['avg_reward'].appendleft(sum(self.metrics['reward_q']) / len(self.metrics['reward_q']))
+                self.metrics['ep_count'] += solved
+                self.metrics['global_step'] += self.args.n_envs * self.args.max_steps
+                # self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
+                # self.metrics['reward_per_agent'] += [res["reward_per_agent"] for res in d.values()]
+                # self.metrics['avg_reward'].appendleft(sum(self.metrics['reward_q']) / len(self.metrics['reward_q']))
 
-                if self.args.verbose:
-                    print(f"E: {self.metrics['ep_count']},\n\t "
-                          f"Avg_Reward for all episodes: {np.mean(self.metrics['avg_reward'])},\n\t"
-                          f"Global_Step: {self.metrics['global_step']},\n\t "
-                          )
+            if self.args.verbose:
+                print(f"E: {self.metrics['ep_count']},\n\t "
+                      f"Global_Step: {self.metrics['global_step']},\n\t "
+                      )
             self._update()
 
             # TODO: Callbacks
             sps = int(self.metrics["global_step"] / (time.time() - self.metrics["start_time"]))
             if self.args.tb_log: self.summary_w.add_scalar('Training/SPS', sps, self.metrics["global_step"])
             if self.metrics['ep_count'] % 1000 == 0: self.save_experiment_data(ckpt=True)
-            if self.metrics['ep_count'] % 1000 == 0: print(f"SPS: {sps}")
+            if self.metrics['ep_count'] % 60 == 0: print(f"SPS: {sps}")
 
         self._finish_training()
 
@@ -297,7 +305,7 @@ class IPPO:
                 nn.utils.clip_grad_norm_(self.critic[k].parameters(), self.args.max_grad_norm)
                 self.c_optim[k].step()
 
-    def _sim(self, render=True, masked=False, pause=0.01):
+    def _sim(self, render=False, masked=False, pause=0.01):
         if self.eval_mode:
             self.args.tb_log = False
 
@@ -308,9 +316,7 @@ class IPPO:
 
         action, logprob, s_value = [{k: 0 for k in self.agents} for _ in range(3)]
         env_action, ep_reward = [np.zeros(self.args.n_agents) for _ in range(2)]
-        job_done = False
-        apple_history = []
-        donation_box_history = []
+
         for step in range(self.args.n_steps):
             self.metrics["global_step"] += 1  # * args.n_envs
 
@@ -330,16 +336,16 @@ class IPPO:
                         self.past_actions_memory[k].appendleft(float(action[k] / len(ACTIONS)))
                     if not self.eval_mode:
                         s_value[k] = self.critic[k](observation[k])
-
+            # TODO: Change action -> env_action mapping
             non_tensor_observation, reward, done, info = self.env.step(env_action)
             if self.args.past_actions_memory > 0:
                 for k in self.agents:
                     non_tensor_observation[k] = np.append(non_tensor_observation[k], self.past_actions_memory[k])
-            apple_history.append(info['n'])
-            donation_box_history.append(info['donationBox'])
 
             if self.metrics["global_step"] % self.args.max_steps == 0:
                 done = [True] * self.args.n_agents
+            else:
+                done = [False] * self.args.n_agents
 
             # Consider the metrics of the first agent, probably want an average of the two
             ep_reward += reward
@@ -361,34 +367,7 @@ class IPPO:
 
             # End of sim
             if all(list(done.values())):
-                self.last_run["apple_history"] = np.array(apple_history)
-                self.last_run["donation_box_history"] = np.array(donation_box_history)
-
-                self.metrics["ep_count"] += 1
-                self.metrics["reward_per_agent"].append(ep_reward)
-                self.last_run["reward_per_agent"] = ep_reward
-                self.metrics["reward_q"].append(np.mean(ep_reward))
-
-                if self.eval_mode:
-                    self.last_run["survive"] = info["survival"]
-                    self.last_run["donation_box_full"] = info["donationBox_full"]
-                    # Weak convergence
-                    self.last_run["convergence"] = True if info["survival"] and not self.last_run["greedy"] \
-                                                           and self.last_run["donation_box_full"] else False
-                    return
-
-                if not job_done:
-                    if self.args.tb_log: self.summary_w.add_scalar('Training/Job_Done',
-                                                                   (step - np.floor(
-                                                                       step / self.args.max_steps) * self.args.max_steps),
-                                                                   self.metrics["global_step"])
-                job_done = False
-                if step != self.args.n_steps - 1:
-                    apple_history = []
-                    donation_box_history = []
-                else:
-                    apple_history = np.array(apple_history).reshape(self.args.max_steps, self.args.n_agents, 1)
-                    donation_box_history = np.array(donation_box_history).reshape(self.args.max_steps, 1)
+                self.metrics['ep_count'] += 1
                 self.metrics["avg_reward"].append(np.mean(self.metrics["reward_q"]))
                 record = {
                     'Training/Global_Step': self.metrics["global_step"],
@@ -463,7 +442,7 @@ class IPPO:
             ep_reward += reward
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
-            done = _array_to_dict_tensor(self.agents, done, self.device)
+            done = _array_to_dict_tensor(self.agents, [done]*self.args.n_agents, self.device)
             if not self.eval_mode:
                 for k in self.agents:
                     single_buffer[k].store(
@@ -496,13 +475,14 @@ class IPPO:
         result[env_id] = data
         cname = mp.current_process().name
         if self.args.verbose:
-            print(f"{cname} Time: {time.time() - start_time}")
+            pass # print(f"{cname} Time: {time.time() - start_time}")
 
     def save_experiment_data(self, folder=None, ckpt=False):
         config = self.args
-        # Create new folder in to save the model using args.we, args.n_steps, args.tot_steps as name
+        # Create new folder in to save the model using tag, n_steps, tot_steps and seed as name
         if folder is None:
             folder = f"{config.save_dir}/{config.tag}/{config.n_steps}_{config.tot_steps // config.max_steps}_{config.seed}"
+
         # Check if folder's config file is the same as the current config
         def diff_config(path):
             if os.path.exists(path):
@@ -543,14 +523,14 @@ class IPPO:
 
 
 if __name__ == "__main__":
-    args = config.parse_ppo_args()
+    args = IndependentPPO.config.parse_ppo_args()
     # Print all the arguments, so they are visible in the log
     print(args)
 
-    # ppo = IPPO(args, env=gym.make(args.env))
+    # ppo = IndependentPPO(args, env=gym.make(args.env))
 
     # Load environment parameters and create environment if needed
-    env_params = config.parse_env_args()
+    env_params = IndependentPPO.config.parse_env_args()
     env = gym.make(args.env, **vars(env_params))
 
     ppo = IPPO(args, env=env, env_params=env_params)
