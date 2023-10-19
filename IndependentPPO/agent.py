@@ -56,23 +56,29 @@ class SoftmaxActor(nn.Module):
     def get_action(self, x, action=None):
         prob = self.forward(x)
         env_action, action, logprob, entropy = self.get_action_data(prob, action)
-        if self.eval_mode:
-            return env_action, action, logprob[0][action], entropy
-        else:
-            return env_action, action, logprob.gather(-1, action.to(th.int64)).squeeze(), entropy
+        return env_action, action, logprob.gather(-1, action.to(th.int64)).squeeze(), entropy
 
     def get_action_data(self, prob, action=None):
         env_action = None
         if action is None:
             if not self.eval_mode:
                 action = th.multinomial(prob, 1)
-            else:
-                action = SoftmaxActor.action_selection(np.array(prob, dtype='float64').squeeze())
             env_action = ACTIONS[action]
 
         logprob = th.log(prob)
         entropy = -(prob * logprob).sum(-1)
         return env_action, action, logprob, entropy
+
+    def predict(self, x):
+        if not self.eval_mode:
+            raise ValueError("Cannot predict in training mode")
+        # Check if its a tensor
+        if not isinstance(x, th.Tensor):
+            x = th.tensor(x, dtype=th.float32)
+        with th.no_grad():
+            prob = self.forward(x)
+            action = SoftmaxActor.action_selection(np.array(prob, dtype='float64').squeeze())
+        return ACTIONS[action]
 
 
 class Critic(nn.Module):

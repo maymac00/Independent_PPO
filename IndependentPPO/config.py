@@ -32,6 +32,7 @@ def parse_ppo_args():
                         help="Directory to save the model and metrics")
 
     parser.add_argument("--past-actions-memory", type=int, default=0, help="Number of past actions to remember")
+    parser.add_argument("--load", type=str, default=None, help="Load configuration from path")
 
     # Algorithm
     parser.add_argument("--clip", type=float, default=0.2, help="Surrogate clipping coefficient")
@@ -77,27 +78,6 @@ def parse_ppo_args():
     args.batch_size = int(1 * args.n_steps)  # otherwise
 
     return args
-
-
-def parse_env_args():
-    # This can be modified to allow bash arguments for the environment (e.g. map size, n_agents, etc.)
-    parser = argparse.ArgumentParser()
-
-    # These should be present in all environments
-    parser.add_argument("--max-steps", type=int, default=500, help="Max n° of steps per episode")
-    parser.add_argument("--n-agents", type=int, default=2, help="N° of agents") # Check if this is in the ppo parser and make sure it's the same
-
-    # Environment specific arguments
-    parser.add_argument("--we", type=float, default=2.6, help="Ethical weight")
-    parser.add_argument("--donation-capacity", type=float, default=5, help="Donation box capacity")
-    parser.add_argument("--survival-threshold", type=float, default=10, help="Survival threshold")
-    parser.add_argument("--partial-observability", type=str2bool, default=True, help="Activates partial observability")
-    parser.add_argument("--visual-radius", type=int, default=3, help="Radius of partial observability")
-    parser.add_argument("--apple-regen", type=float, default=0.005, help="Activates apple regeneration")
-    parser.add_argument("--inequality-mode", type=str, default="loss", help="tie_break, loss")
-    parser.add_argument("--map-size", type=str, default="small", help="tiny, small, big")
-
-    return parser.parse_known_args()[0]
 
 
 def args_from_json(directory):

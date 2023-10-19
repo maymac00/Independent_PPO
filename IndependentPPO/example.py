@@ -2,25 +2,15 @@
 Install MA ethical gathering game as test environment and its dependencies
 pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
 """
-from EthicalGatheringGame.MultiAgentEthicalGathering import MAEGG
+from EthicalGatheringGame import MAEGG
+from EthicalGatheringGame.presets import tiny, small, medium, large
 from IndependentPPO.IPPO import IPPO
 import gym
+import matplotlib
 
-env_config_dict = {
-    'n_agents': 2,
-    'map_size': 'large',
-    'we': [1, 2.6],
-    'inequality_mode': 'loss',
-    'max_steps': 500,
-    'apple_regen': 0.05,
-    'donation_capacity': 10,
-    'survival_threshold': 10,
-    'visual_radius': 2,
-    'partial_observability': True,
-    'init_state': 'full'
-}
+matplotlib.use('TkAgg')
 
-env = gym.make("MultiAgentEthicalGathering-v1", **env_config_dict)
+env = gym.make("MultiAgentEthicalGathering-v1", **tiny)
 args = {
     "verbose": False,
     "tb_log": True,
@@ -36,6 +26,7 @@ args = {
     "past_actions_memory": 0,
     "clip": 0.2,
     "target_kl": None,
+    "load": None,
     "gamma": 0.95,
     "gae_lambda": 0.95,
     "ent_coef": 0.2,
@@ -57,5 +48,16 @@ args = {
     "n_envs": 5,
     "h_layers": 2,
 }
-ppo = IPPO(args, env=env, env_params=env_config_dict)
+
+ppo = IPPO(args, env=env)
 ppo.train()
+
+agents = IPPO.agents_from_file("IndependentPPO/example_data/example/2500_30000_1_ckpt")
+
+# Run a simulation of the trained agents
+obs, info = env.reset()
+done = False
+while not done:
+    actions = [agent.predict(obs[i]) for i, agent in enumerate(agents)]
+    obs, rewards, done, info = env.step(actions)
+    env.render()

@@ -33,15 +33,35 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
 class IPPO:
     summary_w = None
 
-    def __init__(self, args, run_name=None, env=None, env_params=None):
+    @staticmethod
+    def agents_from_file(folder, dev='cpu'):
+        """
+        Creates the agents from the folder's model, and returns them set to eval mode.
+        It is assumed that the model is a SoftmaxActor from file agent.py which only has hidden layers and an output layer.
+        :return:
+        """
+        # Load the args from the folder
+        with open(folder + "/config.json", "r") as f:
+            args = argparse.Namespace(**json.load(f))
+            # Load the model
+            agents = []
+            for k in range(args.n_agents):
+                model = th.load(folder + f"/actor_{k}.pth")
+                o_size = model["hidden.0.weight"].shape[1]
+                a_size = model["output.weight"].shape[0]
+                actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers, eval=True).to(dev)
+                actor.load_state_dict(model)
+                agents.append(actor)
+            return agents
+
+    def __init__(self, args, run_name=None, env=None):
         if type(args) is dict:
             self.args = argparse.Namespace(**args)
         else:
             self.args = args
-        if type(env_params) is dict:
-            self.env_params = argparse.Namespace(**args)
-        else:
-            self.env_params = env_params
+        if self.args.load is not None:
+            # Load args from json
+            self.args = IndependentPPO.config.args_from_json(self.args.load)
 
         if run_name is not None:
             self.run_name = run_name
@@ -90,7 +110,7 @@ class IPPO:
                 warnings.warn(
                     "Efficency is maximized when the number of parallelized environments is equal to n_steps/max_steps.")
 
-            #mp.set_start_method('spawn')
+            # mp.set_start_method('spawn')
 
     def environment_setup(self):
         if self.env is None:
@@ -133,7 +153,7 @@ class IPPO:
         self.environment_setup()
         # set seed for training
         set_seeds(self.args.seed, self.args.th_deterministic)
-        IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args, self.env_params)
+        IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args)
 
         # Init actor-critic setup
         self.actor, self.critic, self.a_optim, self.c_optim, self.buffer = {}, {}, {}, {}, {}
@@ -207,7 +227,7 @@ class IPPO:
                         solved += runs
                         tasks = tasks[runs:]
                     if self.args.verbose:
-                        pass # print("Batch time: ", time.time() - batch_start_time)
+                        pass  # print("Batch time: ", time.time() - batch_start_time)
                     # Fetch the logs
                     for i in range(batch_size):
                         for tup in d[i]["logs"]:
@@ -442,7 +462,7 @@ class IPPO:
             ep_reward += reward
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
-            done = _array_to_dict_tensor(self.agents, [done]*self.args.n_agents, self.device)
+            done = _array_to_dict_tensor(self.agents, [done] * self.args.n_agents, self.device)
             if not self.eval_mode:
                 for k in self.agents:
                     single_buffer[k].store(
@@ -475,7 +495,7 @@ class IPPO:
         result[env_id] = data
         cname = mp.current_process().name
         if self.args.verbose:
-            pass # print(f"{cname} Time: {time.time() - start_time}")
+            pass  # print(f"{cname} Time: {time.time() - start_time}")
 
     def save_experiment_data(self, folder=None, ckpt=False):
         config = self.args
@@ -519,19 +539,17 @@ class IPPO:
             json.dump(vars(config), f, indent=4)
         return folder
 
-    # TODO: Play from file
-
-
-if __name__ == "__main__":
-    args = IndependentPPO.config.parse_ppo_args()
-    # Print all the arguments, so they are visible in the log
-    print(args)
-
-    # ppo = IndependentPPO(args, env=gym.make(args.env))
-
-    # Load environment parameters and create environment if needed
-    env_params = IndependentPPO.config.parse_env_args()
-    env = gym.make(args.env, **vars(env_params))
-
-    ppo = IPPO(args, env=env, env_params=env_params)
-    ppo.train()
+    def add_to_tensorboard(self, tag, data):
+        if self.summary_w is None:
+            raise Exception("Tensorboard is not initialized")
+        if isinstance(data, argparse.Namespace):
+            text = "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(data).items()]))
+        elif isinstance(data, dict):
+            text = "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in data.items()]))
+        elif isinstance(data, np.ndarray):
+            text = "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{i}|{value}|" for i, value in enumerate(data)]))
+        elif isinstance(data, str):
+            text = data
+        else:
+            raise Exception("Data type not supported")
+        self.summary_w.add_text(tag, text)
