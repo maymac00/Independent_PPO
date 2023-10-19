@@ -57,11 +57,10 @@ class IPPO:
     def __init__(self, args, run_name=None, env=None):
         if type(args) is dict:
             self.args = argparse.Namespace(**args)
-        else:
+        elif type(args) is argparse.Namespace:
             self.args = args
-        if self.args.load is not None:
-            # Load args from json
-            self.args = IndependentPPO.config.args_from_json(self.args.load)
+        elif type(args) is str:
+            self.args = IndependentPPO.config.args_from_json(args)
 
         if run_name is not None:
             self.run_name = run_name

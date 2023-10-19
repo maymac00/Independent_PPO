@@ -32,7 +32,6 @@ def parse_ppo_args():
                         help="Directory to save the model and metrics")
 
     parser.add_argument("--past-actions-memory", type=int, default=0, help="Number of past actions to remember")
-    parser.add_argument("--load", type=str, default=None, help="Load configuration from path")
 
     # Algorithm
     parser.add_argument("--clip", type=float, default=0.2, help="Surrogate clipping coefficient")

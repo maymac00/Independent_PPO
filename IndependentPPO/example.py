@@ -26,7 +26,6 @@ args = {
     "past_actions_memory": 0,
     "clip": 0.2,
     "target_kl": None,
-    "load": None,
     "gamma": 0.95,
     "gae_lambda": 0.95,
     "ent_coef": 0.2,
