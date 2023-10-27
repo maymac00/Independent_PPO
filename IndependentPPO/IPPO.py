@@ -66,6 +66,7 @@ class IPPO:
             self.run_name = run_name
         else:
             self.run_name = f"{self.args.env}__{self.args.tag}__{self.args.seed}__{int(time.time())}__{np.random.randint(0, 100)}"
+        print(f"Run name: {self.run_name}")
         self.eval_mode = False
 
         # Action-Space
