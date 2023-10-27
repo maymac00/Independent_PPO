@@ -236,7 +236,7 @@ class IPPO:
 
                     # Merge the results
                     for k in self.agents:
-                        self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(self.args.n_envs)])
+                        self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
                 self.metrics['ep_count'] += solved
                 self.metrics['global_step'] += self.args.n_envs * self.args.max_steps
                 # self.metrics['reward_q'] += [res["reward_q"] for res in d.values()]
