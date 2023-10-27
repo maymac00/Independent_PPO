@@ -154,7 +154,8 @@ def args_from_json(directory):
     for key, value in vars(cmd_args).items():
         if value is not None:
             args[key] = value
-
+    args = argparse.Namespace(**args)
+    args.batch_size = int(1 * args.n_steps)
     return args
 
 
