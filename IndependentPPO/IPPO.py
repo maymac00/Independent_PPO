@@ -153,7 +153,7 @@ class IPPO:
         self.environment_setup()
         # set seed for training
         set_seeds(self.args.seed, self.args.th_deterministic)
-        IPPO.summary_w, self.wandb_path = init_loggers(self.run_name, self.args)
+        IPPO.summary_w, self.wandb_path = init_loggers(self.args.save_dir, self.run_name, self.args)
 
         # Init actor-critic setup
         self.actor, self.critic, self.a_optim, self.c_optim, self.buffer = {}, {}, {}, {}, {}
