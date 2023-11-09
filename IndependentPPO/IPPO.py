@@ -11,7 +11,7 @@ from IndependentPPO.agent import SoftmaxActor, Critic, ACTIONS
 from IndependentPPO.utils.memory import Buffer, merge_buffers
 from IndependentPPO.utils.misc import *
 import IndependentPPO.config
-import gym
+
 import warnings
 
 # The MA environment does not follow the gym SA scheme so it raises lots of warnings
@@ -54,7 +54,7 @@ class IPPO:
                 agents.append(actor)
             return agents
 
-    def __init__(self, args, run_name=None, env=None):
+    def __init__(self, args, env, run_name=None):
         if type(args) is dict:
             self.args = argparse.Namespace(**args)
         elif type(args) is argparse.Namespace:
@@ -285,13 +285,21 @@ class IPPO:
                 if self.args.norm_adv: mb_advantages = normalize(mb_advantages)
 
                 actor_loss = mb_advantages * ratio
+                if self.args.tb_log: IPPO.summary_w.add_scalar('Agent_' + str(k) + "/" + 'Actor non-clipped loss', actor_loss.mean(),
+                                                               (self.metrics[
+                                                                    "global_step"] / self.args.max_steps) * self.args.n_epochs + epoch)
 
                 actor_clip_loss = mb_advantages * th.clamp(ratio, 1 - self.args.clip, 1 + self.args.clip)
+                # Calculate clip fraction
                 actor_loss = th.min(actor_loss, actor_clip_loss).mean()
                 if self.args.tb_log: IPPO.summary_w.add_scalar('Agent_' + str(k) + "/" + 'Actor loss', actor_loss,
                                                                (self.metrics[
                                                                     "global_step"] / self.args.max_steps) * self.args.n_epochs + epoch)
 
+
+                if self.args.tb_log: IPPO.summary_w.add_scalar('Agent_' + str(k) + "/" + 'Entropy', self.args.ent_coef * entropy_loss,
+                                                               (self.metrics[
+                                                                    "global_step"] / self.args.max_steps) * self.args.n_epochs + epoch)
                 actor_loss = -actor_loss - self.args.ent_coef * entropy_loss
                 # if args.tb_log: summary_w.add_scalar('Agent_' + str(k) + "/" + 'Actor loss', actor_loss,
                 # (global_step/args.max_steps)*args.n_epochs+epoch)
@@ -539,7 +547,7 @@ class IPPO:
             json.dump(vars(config), f, indent=4)
         return folder
 
-    def add_to_tensorboard(self, tag, data):
+    def add_text_to_tensorboard(self, tag, data):
         if self.summary_w is None:
             raise Exception("Tensorboard is not initialized")
         if isinstance(data, argparse.Namespace):
