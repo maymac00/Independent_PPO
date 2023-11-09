@@ -422,6 +422,7 @@ class IPPO:
                 ep_reward = np.zeros(self.args.n_agents)
                 # Reset environment
                 observation = self.environment_reset()
+        return record
 
     def _profile_subprocess(self, task):
         import cProfile
