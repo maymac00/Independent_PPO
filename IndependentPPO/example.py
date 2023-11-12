@@ -45,7 +45,8 @@ args = {
     "parallelize": True,
     "n_envs": 5,
     "h_layers": 2,
-    "load": None
+    "load": None,
+    "anneal_entropy": True,
 }
 ppo = IPPO(args, env=env)
 ppo.train()

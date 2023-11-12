@@ -61,7 +61,7 @@ class IPPO:
             self.args = args
         elif type(args) is str:
             self.args = IndependentPPO.config.args_from_json(args)
-
+        self.args.entropy_value = self.args.ent_coef
         if run_name is not None:
             self.run_name = run_name
         else:
@@ -203,6 +203,20 @@ class IPPO:
                 if self.args.tb_log: IPPO.summary_w.add_scalar('Training/Critic LR', c_opt.param_groups[0]["lr"],
 
                                                                self.metrics["global_step"])
+                if self.args.anneal_entropy:
+                    normalized_update = (update - 1.0) / self.n_updates
+
+                    def concave_decay(normalized_step, base_value=1.0, final_value=0.1, concavity=3.5):
+                        complementary_step = 1 - normalized_step
+                        decay_step = normalized_step ** concavity / (
+                                    normalized_step ** concavity + complementary_step ** concavity)
+                        return (base_value - final_value) * (1 - decay_step) + final_value
+
+                    entropy_value = concave_decay(normalized_update) * self.args.ent_coef
+                    self.args.entropy_value = entropy_value
+
+                    if self.args.tb_log: IPPO.summary_w.add_scalar('Training/Entropy Coef', self.args.entropy_value,
+                                                                   self.metrics["global_step"])
 
             if not self.args.parallelize:
                 sim_start = time.time()
@@ -297,10 +311,10 @@ class IPPO:
                                                                     "global_step"] / self.args.max_steps) * self.args.n_epochs + epoch)
 
 
-                if self.args.tb_log: IPPO.summary_w.add_scalar('Agent_' + str(k) + "/" + 'Entropy', self.args.ent_coef * entropy_loss,
+                if self.args.tb_log: IPPO.summary_w.add_scalar('Agent_' + str(k) + "/" + 'Entropy', self.args.entropy_value * entropy_loss,
                                                                (self.metrics[
                                                                     "global_step"] / self.args.max_steps) * self.args.n_epochs + epoch)
-                actor_loss = -actor_loss - self.args.ent_coef * entropy_loss
+                actor_loss = -actor_loss - self.args.entropy_value * entropy_loss
                 # if args.tb_log: summary_w.add_scalar('Agent_' + str(k) + "/" + 'Actor loss', actor_loss,
                 # (global_step/args.max_steps)*args.n_epochs+epoch)
                 self.a_optim[k].zero_grad(True)
