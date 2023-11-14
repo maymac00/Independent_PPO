@@ -30,7 +30,6 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
     else:
         return {k: th.as_tensor(d, dtype=astype).to(device) for k, d in zip(agents, data)}
 
-class BaseIPPO:
 
 class IPPO:
 
