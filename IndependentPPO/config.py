@@ -15,6 +15,10 @@ class CustomArgumentParser(argparse.ArgumentParser):
         return result
 
 
+def get_parser():
+    pass
+
+
 def parse_ppo_args():
     parser = argparse.ArgumentParser()
 
@@ -97,19 +101,19 @@ def args_from_json(directory):
     parser = CustomArgumentParser(description='Example')
     # Logging
     parser.add_argument("--verbose", type=str2bool, help="Stdout")
-    parser.add_argument("--tb-log", type=str2bool,  help="Tensorboard log")
+    parser.add_argument("--tb-log", type=str2bool, help="Tensorboard log")
     parser.add_argument("--tag", type=str, help="Training tag")
 
     # Environment
     parser.add_argument("--n-agents", type=int, help="N° of agents")
-    parser.add_argument("--env", type=str,  help="Gym environment")
-    parser.add_argument("--seed", type=int,  help="seed of the experiment")
+    parser.add_argument("--env", type=str, help="Gym environment")
+    parser.add_argument("--seed", type=int, help="seed of the experiment")
 
     # Experiment
-    parser.add_argument("--max-steps", type=int,  help="Max n° of steps per episode")
+    parser.add_argument("--max-steps", type=int, help="Max n° of steps per episode")
     parser.add_argument("--n-steps", type=int, help="Steps between policy updates")
-    parser.add_argument("--tot-steps", type=int,  help="Total timesteps of the experiment")
-    parser.add_argument("--early-stop", type=float,help="Steps to stop the experiment early")
+    parser.add_argument("--tot-steps", type=int, help="Total timesteps of the experiment")
+    parser.add_argument("--early-stop", type=float, help="Steps to stop the experiment early")
     parser.add_argument("--save-dir", type=str,
                         help="Directory to save the model and metrics")
 

@@ -12,8 +12,13 @@ Array = np.array
 
 
 @th.jit.script
-def normalize(x: Tensor) -> Tensor:
+def standarize(x: Tensor) -> Tensor:
     return (x - x.mean()) / (x.std() + 1e-8)
+
+
+@th.jit.script
+def normalize(x: Tensor) -> Tensor:
+    return (x - x.min()) / (x.max() - x.min() + 1e-8)
 
 
 def str2bool(v):
@@ -34,27 +39,3 @@ def set_seeds(seed: int, deterministic: Optional[bool]):
 def set_torch(n_cpus: int, cuda: bool) -> th.device:
     th.set_num_threads(n_cpus)
     return th.device("cuda" if th.cuda.is_available() and cuda else "cpu")
-
-
-def init_loggers(dir, run_name: str, args: Dict[str, Union[int, float, List]]) -> Tuple[SummaryWriter, str]:
-    summary_w, wandb_path = None, None
-    '''
-    if args.wandb_log:
-        wandb_path = wandb.init(
-            name=run_name,
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            mode=args.wandb_mode,
-            save_code=args.wandb_code,
-            config=vars(args)
-            )
-        wandb_path =  os.path.split(wandb_path.dir)[0]
-    '''
-    if args.tb_log:
-        summary_w = SummaryWriter(dir+f"/log/{args.tag}/{run_name}")
-        summary_w.add_text(
-            "hyperparameters",
-            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-        )
-
-    return summary_w, wandb_path

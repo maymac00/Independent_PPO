@@ -3,6 +3,7 @@ import copy
 import json
 import time
 import warnings
+
 from collections import deque
 
 from torch import optim
@@ -15,11 +16,13 @@ import torch.nn as nn
 from torch.multiprocessing import Manager
 import torch.multiprocessing as mp
 import IndependentPPO
+from IndependentPPO.wrappers import UpdateCallback, Callback
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
 warnings.simplefilter(action='ignore', category=DeprecationWarning)
+
 
 def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, astype: Type = th.float32) -> Dict:
     # Check if the provided device is already the current device
@@ -29,6 +32,40 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
         return {k: th.as_tensor(d, dtype=astype) for k, d in zip(agents, data)}
     else:
         return {k: th.as_tensor(d, dtype=astype).to(device) for k, d in zip(agents, data)}
+
+
+import torch
+
+
+def find_tensors_requiring_grads(obj, parent_name=''):
+    """
+    Recursively find all tensors with requires_grad=True in a PyTorch module or object.
+    """
+    tensors_requiring_grad = []
+
+    # If the object itself is a tensor that requires grad, add it to the list
+    if isinstance(obj, torch.Tensor) and obj.requires_grad:
+        return [(parent_name, obj)]
+
+    # If this is a module, we'll look at its parameters and buffers
+    if isinstance(obj, torch.nn.Module):
+        for name, param in obj.named_parameters(recurse=False):
+            if param.requires_grad:
+                tensors_requiring_grad.append((f'{parent_name}.{name}' if parent_name else name, param))
+        for name, buffer in obj.named_buffers(recurse=False):
+            if buffer.requires_grad:
+                tensors_requiring_grad.append((f'{parent_name}.{name}' if parent_name else name, buffer))
+
+    # Recursively check any iterable or object attributes
+    if hasattr(obj, '__dict__'):
+        for name, attr in obj.__dict__.items():
+            tensors_requiring_grad += find_tensors_requiring_grads(attr,
+                                                                   f'{parent_name}.{name}' if parent_name else name)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, torch.Tensor)):
+        for idx, item in enumerate(obj):
+            tensors_requiring_grad += find_tensors_requiring_grads(item, f'{parent_name}[{idx}]')
+
+    return tensors_requiring_grad
 
 
 class IPPO:
@@ -87,6 +124,9 @@ class IPPO:
             'reward_per_agent': [],
             'avg_reward': [],
         }
+        self.update_metrics = {}
+        self.sim_metrics = {}
+        self.callbacks = []
 
         #   Actor-Critic
         self.n_updates = None
@@ -122,6 +162,12 @@ class IPPO:
             return observation
 
     def update(self):
+
+        # Run callbacks
+        for c in self.callbacks:
+            if issubclass(type(c), UpdateCallback):
+                c.before_update()
+
         update_metrics = {}
 
         with th.no_grad():
@@ -178,12 +224,18 @@ class IPPO:
                 critic_loss.backward()
                 nn.utils.clip_grad_norm_(self.critic[k].parameters(), self.max_grad_norm)
                 self.c_optim[k].step()
+        self.update_metrics = update_metrics
+
+        # Run callbacks
+        for c in self.callbacks:
+            if issubclass(type(c), UpdateCallback):
+                c.after_update()
 
         return update_metrics
 
     def _sim(self):
-        sim_metrics = {}
-
+        sim_metrics = {"reward_per_agent": np.zeros(self.n_agents)}
+        episodes = 0
         observation = self.environment_reset()
 
         action, logprob, s_value = [{k: 0 for k in self.agents} for _ in range(3)]
@@ -220,10 +272,12 @@ class IPPO:
 
             # End of sim
             if all(list(done.values())):
-                sim_metrics["reward_per_agent"] = ep_reward
+                episodes += 1
+                sim_metrics["reward_per_agent"] += ep_reward
                 ep_reward = np.zeros(self.n_agents)
                 # Reset environment
                 observation = self.environment_reset()
+        sim_metrics["reward_per_agent"] /= episodes
         return sim_metrics
 
     def _parallel_sim(self, tasks):
@@ -260,7 +314,7 @@ class IPPO:
             ep_reward += reward
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
-            done = _array_to_dict_tensor(self.agents, [done] * self.n_agents, self.device)
+            done = _array_to_dict_tensor(self.agents, done, self.device)
             for k in self.agents:
                 single_buffer[k].store(
                     observation[k],
@@ -274,9 +328,12 @@ class IPPO:
             observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
 
         # End of simulation
+        for k in self.agents:
+            single_buffer[k].detach()
         data["reward_per_agent"] = ep_reward
         data["single_buffer"] = single_buffer
         result[env_id] = data
+        pass
 
     def train(self):
         self.environment_setup()
@@ -300,15 +357,19 @@ class IPPO:
             'global_step': 0,
             'ep_count': 0,
             'start_time': time.time(),
+            'sim_start_time': time.time(),
             'avg_reward': deque(maxlen=500),
         }
 
         # Training loop
         self.n_updates = self.tot_steps // self.batch_size
         for update in range(1, self.n_updates + 1):
+            self.run_metrics['sim_start_time'] = time.time()
             if not self.parallelize:
-                self._sim()
+                self.sim_metrics = self._sim()
+                self.run_metrics['avg_reward'].append(self.sim_metrics["reward_per_agent"].mean())
             else:
+
                 with Manager() as manager:
                     d = manager.dict()
                     batch_size = int(self.n_steps / self.max_steps)
@@ -325,14 +386,15 @@ class IPPO:
                         tasks = tasks[runs:]
 
                     # Fetch the logs
-                    sim_metrics = self._parallel_results(d, batch_size)
+                    self.sim_metrics = self._parallel_results(d, batch_size)
 
                     # Merge the results
                     for k in self.agents:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
                 self.run_metrics['ep_count'] += solved
                 self.run_metrics['global_step'] += solved * self.max_steps
-
+                self.run_metrics['avg_reward'].append(
+                    np.array([np.mean(s["reward_per_agent"]) for s in self.sim_metrics]).mean())
             self.update()
 
         self.finish_training()
@@ -365,7 +427,7 @@ class IPPO:
             sim_metrics[i]["global_step"] = d[i]["global_step"]
         return sim_metrics
 
-    def _finish_training(self):
+    def finish_training(self):
         self.save_experiment_data()
 
     def save_experiment_data(self, folder=None, ckpt=False):
@@ -409,3 +471,18 @@ class IPPO:
         with open(folder + "/config.json", "w") as f:
             json.dump(vars(config), f, indent=4)
         return folder
+
+    def addCallbacks(self, callbacks):
+        if isinstance(callbacks, list):
+            for c in callbacks:
+                if not issubclass(type(c), Callback):
+                    raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
+                c.ppo = self
+                c.initiate()
+            self.callbacks = callbacks
+        elif isinstance(callbacks, Callback):
+            callbacks.ppo = self
+            callbacks.initiate()
+            self.callbacks.append(callbacks)
+        else:
+            raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
