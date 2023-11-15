@@ -16,7 +16,7 @@ import torch.nn as nn
 from torch.multiprocessing import Manager
 import torch.multiprocessing as mp
 import IndependentPPO
-from IndependentPPO.wrappers import UpdateCallback, Callback
+from IndependentPPO.callbacks import UpdateCallback, Callback
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -90,6 +90,7 @@ class IPPO:
             'reward_q': [],
             'reward_per_agent': [],
             'avg_reward': [],
+            'sim_start_time': time.time(),
         }
         self.update_metrics = {}
         self.sim_metrics = {}
@@ -151,25 +152,25 @@ class IPPO:
                 _, _, logprob, entropy = self.actor[k].get_action(b['observations'], b['actions'])
                 entropy_loss = entropy.mean()
 
-                update_metrics[f"Agent_{k}/Entropy"] = entropy_loss
+                update_metrics[f"Agent_{k}/Entropy"] = entropy_loss.detach()
 
                 logratio = logprob - b['logprobs']
                 ratio = logratio.exp()
-                update_metrics[f"Agent_{k}/Ratio"] = ratio.mean()
+                update_metrics[f"Agent_{k}/Ratio"] = ratio.mean().detach()
 
                 mb_advantages = b['advantages']
                 if self.norm_adv: mb_advantages = normalize(mb_advantages)
 
                 actor_loss = mb_advantages * ratio
-                update_metrics[f"Agent_{k}/Non-Clipped Actor Loss"] = actor_loss.mean()
+                update_metrics[f"Agent_{k}/Non-Clipped Actor Loss"] = actor_loss.mean().detach()
 
                 actor_clip_loss = mb_advantages * th.clamp(ratio, 1 - self.clip, 1 + self.clip)
                 # Calculate clip fraction
                 actor_loss = th.min(actor_loss, actor_clip_loss).mean()
-                update_metrics[f"Agent_{k}/Actor Loss"] = actor_loss
+                update_metrics[f"Agent_{k}/Actor Loss"] = actor_loss.detach()
 
                 actor_loss = -actor_loss - self.ent_coef * entropy_loss
-                update_metrics[f"Agent_{k}/Actor Loss with Entropy"] = actor_loss
+                update_metrics[f"Agent_{k}/Actor Loss with Entropy"] = actor_loss.detach()
 
                 self.a_optim[k].zero_grad(True)
                 actor_loss.backward()
@@ -181,10 +182,10 @@ class IPPO:
                 values = self.critic[k](b['observations']).squeeze()
 
                 critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
-                update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss
+                update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
 
                 critic_loss = critic_loss * self.v_coef
-                update_metrics[f"Agent_{k}/Critic Loss with V Coef"] = critic_loss
+                update_metrics[f"Agent_{k}/Critic Loss with V Coef"] = critic_loss.detach()
 
                 self.c_optim[k].zero_grad(True)
                 critic_loss.backward()
@@ -200,7 +201,7 @@ class IPPO:
         return update_metrics
 
     def _sim(self):
-        sim_metrics = {}
+        sim_metrics = {"reward_per_agent": np.zeros(self.n_agents)}
 
         observation = self.environment_reset()
 
@@ -238,10 +239,11 @@ class IPPO:
 
             # End of sim
             if all(list(done.values())):
-                sim_metrics["reward_per_agent"] = ep_reward
+                sim_metrics["reward_per_agent"] += ep_reward
                 ep_reward = np.zeros(self.n_agents)
                 # Reset environment
                 observation = self.environment_reset()
+        sim_metrics["reward_per_agent"] /= (self.n_steps/self.max_steps)
         return sim_metrics
 
     def _parallel_sim(self, tasks):
@@ -278,7 +280,7 @@ class IPPO:
             ep_reward += reward
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
-            done = _array_to_dict_tensor(self.agents, [done] * self.n_agents, self.device)
+            done = _array_to_dict_tensor(self.agents, done, self.device)
             for k in self.agents:
                 single_buffer[k].store(
                     observation[k],
@@ -324,8 +326,10 @@ class IPPO:
         # Training loop
         self.n_updates = self.tot_steps // self.batch_size
         for update in range(1, self.n_updates + 1):
+            self.run_metrics["sim_start_time"] = time.time()
             if not self.parallelize:
-                self._sim()
+                sim_metrics = self._sim()
+                self.run_metrics["avg_reward"].append(sim_metrics["reward_per_agent"].mean())
             else:
                 with Manager() as manager:
                     d = manager.dict()
@@ -350,6 +354,7 @@ class IPPO:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
                 self.run_metrics['ep_count'] += solved
                 self.run_metrics['global_step'] += solved * self.max_steps
+                self.run_metrics['avg_reward'].append(np.array([s["reward_per_agent"] for s in sim_metrics]).mean())
 
             self.update()
 

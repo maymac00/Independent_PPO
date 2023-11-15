@@ -100,7 +100,7 @@ class TensorBoardLogging(UpdateCallback):
         self.writer.add_scalar("Training/Entropy coef", self.ppo.entropy_value, self.ppo.run_metrics["global_step"])
         self.writer.add_scalar("Training/Actor LR", self.ppo.actor_lr, self.ppo.run_metrics["global_step"])
         self.writer.add_scalar("Training/Critic LR", self.ppo.critic_lr, self.ppo.run_metrics["global_step"])
-        self.writer.add_scalar("Training/SPS", (self.ppo.run_metrics["sim_start_time"] - time.time()) / self.ppo.n_steps,
+        self.writer.add_scalar("Training/SPS", (self.ppo.n_steps / self.ppo.run_metrics["sim_start_time"] - time.time()),
                                self.ppo.run_metrics["global_step"])
         for key, value in self.ppo.update_metrics.items():
             if isinstance(value, list):
@@ -121,8 +121,4 @@ class PrintAverageReward(UpdateCallback):
             print(f"Average Reward: {np.array(self.ppo.run_metrics['avg_reward']).mean()}")
 
     def before_update(self):
-<<<<<<< HEAD
         pass
-=======
-        pass
->>>>>>> callbacks

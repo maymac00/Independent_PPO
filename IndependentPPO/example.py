@@ -5,7 +5,7 @@ pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
 from EthicalGatheringGame import MAEGG
 from EthicalGatheringGame.presets import tiny, small, medium, large
 from IndependentPPO.IPPO import IPPO
-from IndependentPPO.wrappers import LearningRateDecay, AnnealEntropy, PrintAverageReward, TensorBoardLogging
+from IndependentPPO.callbacks import LearningRateDecay, AnnealEntropy, PrintAverageReward, TensorBoardLogging
 from IndependentPPO.config import args_from_json
 import gym
 import matplotlib
