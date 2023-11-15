@@ -34,41 +34,8 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
         return {k: th.as_tensor(d, dtype=astype).to(device) for k, d in zip(agents, data)}
 
 
-import torch
-
-
-def find_tensors_requiring_grads(obj, parent_name=''):
-    """
-    Recursively find all tensors with requires_grad=True in a PyTorch module or object.
-    """
-    tensors_requiring_grad = []
-
-    # If the object itself is a tensor that requires grad, add it to the list
-    if isinstance(obj, torch.Tensor) and obj.requires_grad:
-        return [(parent_name, obj)]
-
-    # If this is a module, we'll look at its parameters and buffers
-    if isinstance(obj, torch.nn.Module):
-        for name, param in obj.named_parameters(recurse=False):
-            if param.requires_grad:
-                tensors_requiring_grad.append((f'{parent_name}.{name}' if parent_name else name, param))
-        for name, buffer in obj.named_buffers(recurse=False):
-            if buffer.requires_grad:
-                tensors_requiring_grad.append((f'{parent_name}.{name}' if parent_name else name, buffer))
-
-    # Recursively check any iterable or object attributes
-    if hasattr(obj, '__dict__'):
-        for name, attr in obj.__dict__.items():
-            tensors_requiring_grad += find_tensors_requiring_grads(attr,
-                                                                   f'{parent_name}.{name}' if parent_name else name)
-    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, torch.Tensor)):
-        for idx, item in enumerate(obj):
-            tensors_requiring_grad += find_tensors_requiring_grads(item, f'{parent_name}[{idx}]')
-
-    return tensors_requiring_grad
-
-
 class IPPO:
+    callbacks: List[Callback] =[]
 
     @staticmethod
     def agents_from_file(folder, dev='cpu'):
@@ -126,7 +93,6 @@ class IPPO:
         }
         self.update_metrics = {}
         self.sim_metrics = {}
-        self.callbacks = []
 
         #   Actor-Critic
         self.n_updates = None
@@ -164,7 +130,7 @@ class IPPO:
     def update(self):
 
         # Run callbacks
-        for c in self.callbacks:
+        for c in IPPO.callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.before_update()
 
@@ -185,25 +151,25 @@ class IPPO:
                 _, _, logprob, entropy = self.actor[k].get_action(b['observations'], b['actions'])
                 entropy_loss = entropy.mean()
 
-                update_metrics[f"Agent_{k}/Entropy"] = entropy_loss
+                update_metrics[f"Agent_{k}/Entropy"] = entropy_loss.detach()
 
                 logratio = logprob - b['logprobs']
                 ratio = logratio.exp()
-                update_metrics[f"Agent_{k}/Ratio"] = ratio.mean()
+                update_metrics[f"Agent_{k}/Ratio"] = ratio.mean().detach()
 
                 mb_advantages = b['advantages']
                 if self.norm_adv: mb_advantages = normalize(mb_advantages)
 
                 actor_loss = mb_advantages * ratio
-                update_metrics[f"Agent_{k}/Non-Clipped Actor Loss"] = actor_loss.mean()
+                update_metrics[f"Agent_{k}/Non-Clipped Actor Loss"] = actor_loss.mean().detach()
 
                 actor_clip_loss = mb_advantages * th.clamp(ratio, 1 - self.clip, 1 + self.clip)
                 # Calculate clip fraction
                 actor_loss = th.min(actor_loss, actor_clip_loss).mean()
-                update_metrics[f"Agent_{k}/Actor Loss"] = actor_loss
+                update_metrics[f"Agent_{k}/Actor Loss"] = actor_loss.detach()
 
                 actor_loss = -actor_loss - self.ent_coef * entropy_loss
-                update_metrics[f"Agent_{k}/Actor Loss with Entropy"] = actor_loss
+                update_metrics[f"Agent_{k}/Actor Loss with Entropy"] = actor_loss.detach()
 
                 self.a_optim[k].zero_grad(True)
                 actor_loss.backward()
@@ -215,10 +181,10 @@ class IPPO:
                 values = self.critic[k](b['observations']).squeeze()
 
                 critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
-                update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss
+                update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
 
                 critic_loss = critic_loss * self.v_coef
-                update_metrics[f"Agent_{k}/Critic Loss with V Coef"] = critic_loss
+                update_metrics[f"Agent_{k}/Critic Loss with V Coef"] = critic_loss.detach()
 
                 self.c_optim[k].zero_grad(True)
                 critic_loss.backward()
@@ -227,7 +193,7 @@ class IPPO:
         self.update_metrics = update_metrics
 
         # Run callbacks
-        for c in self.callbacks:
+        for c in IPPO.callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.after_update()
 
@@ -328,8 +294,6 @@ class IPPO:
             observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
 
         # End of simulation
-        for k in self.agents:
-            single_buffer[k].detach()
         data["reward_per_agent"] = ep_reward
         data["single_buffer"] = single_buffer
         result[env_id] = data
@@ -391,6 +355,7 @@ class IPPO:
                     # Merge the results
                     for k in self.agents:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
+
                 self.run_metrics['ep_count'] += solved
                 self.run_metrics['global_step'] += solved * self.max_steps
                 self.run_metrics['avg_reward'].append(
@@ -479,10 +444,10 @@ class IPPO:
                     raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
                 c.ppo = self
                 c.initiate()
-            self.callbacks = callbacks
+            IPPO.callbacks = callbacks
         elif isinstance(callbacks, Callback):
             callbacks.ppo = self
             callbacks.initiate()
-            self.callbacks.append(callbacks)
+            IPPO.callbacks.append(callbacks)
         else:
             raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")

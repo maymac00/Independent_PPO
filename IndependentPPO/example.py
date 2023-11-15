@@ -50,10 +50,10 @@ args = {
     "anneal_entropy": True,
 }
 ppo = IPPO(args, env=env)
-#ppo.addCallbacks(LearningRateDecay(ppo, 0.999))
-#ppo.addCallbacks(PrintAverageReward(ppo, 100))
-#ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.1, 3.5))
-#ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
+ppo.addCallbacks(LearningRateDecay(ppo, 0.999))
+ppo.addCallbacks(PrintAverageReward(ppo, 10))
+ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.1, 3.5))
+ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
 
 ppo.train()
 
