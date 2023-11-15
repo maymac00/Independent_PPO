@@ -3,6 +3,7 @@ import copy
 import json
 import time
 import warnings
+
 from collections import deque
 
 from torch import optim
@@ -15,12 +16,13 @@ import torch.nn as nn
 from torch.multiprocessing import Manager
 import torch.multiprocessing as mp
 import IndependentPPO
-from IndependentPPO.wrappers import Callback, UpdateCallback
+from IndependentPPO.wrappers import UpdateCallback, Callback
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
 warnings.simplefilter(action='ignore', category=DeprecationWarning)
+
 
 def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, astype: Type = th.float32) -> Dict:
     # Check if the provided device is already the current device
@@ -33,6 +35,7 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
 
 
 class IPPO:
+    callbacks: List[Callback] =[]
 
     @staticmethod
     def agents_from_file(folder, dev='cpu'):
@@ -88,7 +91,8 @@ class IPPO:
             'reward_per_agent': [],
             'avg_reward': [],
         }
-        self.callbacks = []
+        self.update_metrics = {}
+        self.sim_metrics = {}
 
         #   Actor-Critic
         self.n_updates = None
@@ -124,6 +128,12 @@ class IPPO:
             return observation
 
     def update(self):
+
+        # Run callbacks
+        for c in IPPO.callbacks:
+            if issubclass(type(c), UpdateCallback):
+                c.before_update()
+
         update_metrics = {}
 
         with th.no_grad():
@@ -180,13 +190,13 @@ class IPPO:
                 critic_loss.backward()
                 nn.utils.clip_grad_norm_(self.critic[k].parameters(), self.max_grad_norm)
                 self.c_optim[k].step()
-
         self.update_metrics = update_metrics
 
         # Run callbacks
-        for c in self.callbacks:
+        for c in IPPO.callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.after_update()
+
         return update_metrics
 
     def _sim(self):
@@ -268,7 +278,7 @@ class IPPO:
             ep_reward += reward
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
-            done = _array_to_dict_tensor(self.agents, done, self.device)
+            done = _array_to_dict_tensor(self.agents, [done] * self.n_agents, self.device)
             for k in self.agents:
                 single_buffer[k].store(
                     observation[k],
@@ -425,10 +435,10 @@ class IPPO:
                     raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
                 c.ppo = self
                 c.initiate()
-            self.callbacks = callbacks
+            IPPO.callbacks = callbacks
         elif isinstance(callbacks, Callback):
             callbacks.ppo = self
             callbacks.initiate()
-            self.callbacks.append(callbacks)
+            IPPO.callbacks.append(callbacks)
         else:
             raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")

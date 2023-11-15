@@ -121,4 +121,8 @@ class PrintAverageReward(UpdateCallback):
             print(f"Average Reward: {np.array(self.ppo.run_metrics['avg_reward']).mean()}")
 
     def before_update(self):
+<<<<<<< HEAD
         pass
+=======
+        pass
+>>>>>>> callbacks

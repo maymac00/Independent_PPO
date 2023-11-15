@@ -5,6 +5,7 @@ pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
 from EthicalGatheringGame import MAEGG
 from EthicalGatheringGame.presets import tiny, small, medium, large
 from IndependentPPO.IPPO import IPPO
+from IndependentPPO.wrappers import LearningRateDecay, AnnealEntropy, PrintAverageReward, TensorBoardLogging
 from IndependentPPO.config import args_from_json
 import gym
 import matplotlib
@@ -19,7 +20,7 @@ args = {
     "max_steps": 500,
     "n_agents": 2,
     "n_steps": 2500,
-    "tot_steps": 15000000,
+    "tot_steps": 500000,
     "save_dir": "example_data",
     "early_stop": 15000000,
     "past_actions_memory": 0,
@@ -49,6 +50,11 @@ args = {
     "anneal_entropy": True,
 }
 ppo = IPPO(args, env=env)
+ppo.addCallbacks(LearningRateDecay(ppo, 0.999))
+ppo.addCallbacks(PrintAverageReward(ppo, 10))
+ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.1, 3.5))
+ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
+
 ppo.train()
 
 agents = IPPO.agents_from_file("IndependentPPO/example_data/example/2500_30000_1_ckpt")
