@@ -22,9 +22,7 @@ def get_parser():
 def parse_ppo_args():
     parser = argparse.ArgumentParser()
 
-    # Logging    
-    parser.add_argument("--verbose", type=str2bool, default=False, help="Stdout")
-    parser.add_argument("--tb-log", type=str2bool, default=True, help="Tensorboard log")
+    # Logging
     parser.add_argument("--tag", type=str, default='IPPO_clip_gaussian', help="Training tag")
 
     # Environment
@@ -60,6 +58,9 @@ def parse_ppo_args():
     parser.add_argument("--norm-adv", type=str2bool, default=True, help="Toggles advantages normalization")
     parser.add_argument("--max-grad-norm", type=float, default=1., help="Maximum norm for gradient clipping")
     parser.add_argument("--critic-times", type=int, default=2, help="Multiplicator for number of epochs of the critic")
+
+    parser.add_argument("--anneal-entropy", type=str2bool, default=True, help="Toggles annealing entropy coefficient")
+    parser.add_argument("--concavity-entropy", type=float, default=3.5, help="Sets concavity of entropy coefficient")
 
     # DNN
     parser.add_argument("--h-size", type=int, default=128, help="Layers size")
@@ -100,8 +101,6 @@ def args_from_json(directory):
     # Parse arguments
     parser = CustomArgumentParser(description='Example')
     # Logging
-    parser.add_argument("--verbose", type=str2bool, help="Stdout")
-    parser.add_argument("--tb-log", type=str2bool, help="Tensorboard log")
     parser.add_argument("--tag", type=str, help="Training tag")
 
     # Environment
@@ -137,6 +136,9 @@ def args_from_json(directory):
     parser.add_argument("--norm-adv", type=str2bool, help="Toggles advantages normalization")
     parser.add_argument("--max-grad-norm", type=float, help="Maximum norm for gradient clipping")
     parser.add_argument("--critic-times", type=int, help="Multiplicator for number of epochs of the critic")
+
+    parser.add_argument("--anneal-entropy", type=str2bool, default=True, help="Toggles annealing entropy coefficient")
+    parser.add_argument("--concavity-entropy", type=float, default=3.5, help="Sets concavity of entropy coefficient")
 
     # DNN
     parser.add_argument("--h-size", type=int, help="Layers size")
