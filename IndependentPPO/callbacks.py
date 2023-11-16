@@ -75,7 +75,6 @@ class AnnealEntropy(UpdateCallback):
                     normalized_update ** self.concavity + complementary_update ** self.concavity)
             frac = (self.base_value - self.final_value) * (1 - decay_step) + self.final_value
             self.ppo.entropy_value = frac * self.ppo.init_args.ent_coef
-            print(self.ppo.entropy_value)
         elif self.type == "linear":
             update = self.ppo.run_metrics["global_step"] / self.ppo.n_steps
             frac = 1.0 - (update - 1.0) / self.ppo.n_updates
