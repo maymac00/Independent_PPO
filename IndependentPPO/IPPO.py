@@ -321,6 +321,7 @@ class IPPO:
             'ep_count': 0,
             'start_time': time.time(),
             'avg_reward': deque(maxlen=500),
+            'agent_performance': {}
         }
 
         # Training loop
@@ -330,6 +331,9 @@ class IPPO:
             if not self.parallelize:
                 sim_metrics = self._sim()
                 self.run_metrics["avg_reward"].append(sim_metrics["reward_per_agent"].mean())
+                # Save mean reward per agent
+                for k in self.agents:
+                    self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][:,k].mean()
             else:
                 with Manager() as manager:
                     d = manager.dict()
@@ -354,7 +358,11 @@ class IPPO:
                         self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
                 self.run_metrics['ep_count'] += solved
                 self.run_metrics['global_step'] += solved * self.max_steps
-                self.run_metrics['avg_reward'].append(np.array([s["reward_per_agent"] for s in sim_metrics]).mean())
+                rew = np.array([s["reward_per_agent"] for s in sim_metrics])
+                self.run_metrics['avg_reward'].append(rew.mean())
+                # Save mean reward per agent
+                for k in self.agents:
+                    self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = rew[:, k].mean()
 
             self.update()
 

@@ -11,11 +11,10 @@ class Callback(ABC):
     def __init__(self, *args, **kwargs):
         self.ppo = None
 
-    """
-    Method to overload in case you need self.ppo for the constructor. This is needed since you do not have 
-    access to qlearn instance on Callback.__init__"""
-
     def initiate(self):
+        """
+           Method to overload in case you need self.ppo for the constructor. This is needed since you do not have
+           access to qlearn instance on Callback.__init__"""
         pass
 
 
@@ -104,11 +103,15 @@ class TensorBoardLogging(UpdateCallback):
         self.writer.add_scalar("Training/SPS",
                                self.ppo.n_steps / (time.time() - self.ppo.run_metrics["sim_start_time"]),
                                self.ppo.run_metrics["global_step"])
+        for k, v in self.ppo.run_metrics["agent_performance"].items():
+            self.writer.add_scalar(k, v, self.ppo.run_metrics["global_step"])
+
         for key, value in self.ppo.update_metrics.items():
             if isinstance(value, list):
                 self.writer.add_scalar(key, np.array(value).mean(), self.ppo.run_metrics["global_step"])
             else:
                 self.writer.add_scalar(key, value, self.ppo.run_metrics["global_step"])
+
 
 
 # Printing Wrappers:
