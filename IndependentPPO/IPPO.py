@@ -358,7 +358,7 @@ class IPPO:
 
             self.update()
 
-        self.finish_training()
+        self._finish_training()
 
     def environment_setup(self):
         if self.env is None:
