@@ -43,10 +43,10 @@ class LearningRateDecay(UpdateCallback):
     def after_update(self):
         if self.type == "linear":
             if self.decay is None:
-                update = self.run_metrics["global_step"] / self.n_steps
-                frac = 1.0 - (update - 1.0) / self.n_updates
-                self.ppo.actor_lr = frac * self.init_args.actor_lr
-                self.ppo.critic_lr = frac * self.init_args.critic_lr
+                update = self.ppo.run_metrics["global_step"] / self.ppo.n_steps
+                frac = 1.0 - (update - 1.0) / self.ppo.n_updates
+                self.ppo.actor_lr = frac * self.ppo.init_args.actor_lr
+                self.ppo.critic_lr = frac * self.ppo.init_args.critic_lr
             else:
                 self.ppo.actor_lr *= self.decay
                 self.ppo.critic_lr *= self.decay
