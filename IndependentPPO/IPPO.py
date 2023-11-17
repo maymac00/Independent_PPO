@@ -400,7 +400,7 @@ class IPPO:
         self.save_experiment_data()
 
     def save_experiment_data(self, folder=None, ckpt=False):
-        config = self.args
+        config = self.init_args
         # Create new folder in to save the model using tag, n_steps, tot_steps and seed as name
         if folder is None:
             folder = f"{config.save_dir}/{config.tag}/{config.n_steps}_{config.tot_steps // config.max_steps}_{config.seed}"
