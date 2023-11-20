@@ -181,7 +181,16 @@ class IPPO:
             for epoch in range(self.n_epochs * self.critic_times):
                 values = self.critic[k](b['observations']).squeeze()
 
-                critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
+                # Value clipping
+                if self.clip_vloss:
+                    v_loss_unclipped = (values - b['returns']) ** 2
+                    v_clipped = b['values'] + th.clamp(values - b['values'], -self.clip, self.clip)
+                    v_loss_clipped = (v_clipped - b['returns']) ** 2
+                    critic_loss = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
+                else:
+                    # No value clipping
+                    critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
+
                 update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
 
                 critic_loss = critic_loss * self.v_coef
@@ -191,6 +200,9 @@ class IPPO:
                 critic_loss.backward()
                 nn.utils.clip_grad_norm_(self.critic[k].parameters(), self.max_grad_norm)
                 self.c_optim[k].step()
+
+            loss = actor_loss - entropy_loss * self.entropy_value + critic_loss * self.v_coef
+            update_metrics[f"Agent_{k}/Loss"] = critic_loss.detach()
         self.update_metrics = update_metrics
 
         # Run callbacks

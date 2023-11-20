@@ -10,7 +10,9 @@ from IndependentPPO.config import args_from_json
 import gym
 import matplotlib
 
+tiny["we"] = [1, 999]
 env = gym.make("MultiAgentEthicalGathering-v1", **tiny)
+
 args = {
     "verbose": False,
     "tb_log": True,
@@ -30,8 +32,8 @@ args = {
     "gae_lambda": 0.95,
     "ent_coef": 0.04,
     "v_coef": 0.5,
-    "actor_lr": 0.003,
-    "critic_lr": 0.01,
+    "actor_lr": 0.0003,
+    "critic_lr": 0.001,
     "anneal_lr": True,
     "n_epochs": 10,
     "norm_adv": True,
@@ -48,10 +50,16 @@ args = {
     "h_layers": 2,
     "load": None,
     "anneal_entropy": True,
+    "concavity_entropy": 3.5,
+    "clip_vloss": True,
 }
+
+args["tot_steps"] = 1000000
+args["tag"] = "vloss_clip"
+
 ppo = IPPO(args, env=env)
-ppo.addCallbacks(LearningRateDecay(ppo, 0.999))
-ppo.addCallbacks(PrintAverageReward(ppo, 10))
+ppo.addCallbacks(LearningRateDecay(ppo))
+ppo.addCallbacks(PrintAverageReward(ppo, 300))
 ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.1, 3.5))
 ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
 

@@ -49,6 +49,7 @@ def parse_ppo_args():
     parser.add_argument("--v-coef", type=float, default=0.5, help="Value function coefficient")
     parser.add_argument("--parallelize", type=str2bool, default=True, help="Parallelize the environment")
     parser.add_argument("--n-envs", type=int, default=5, help="Parallelize the environment")
+    parser.add_argument("--clip-vloss", type=str2bool, default=True, help="Clip value loss")
 
     # Update
     parser.add_argument("--actor-lr", type=float, default=3e-4, help="Actor lr")
@@ -127,6 +128,7 @@ def args_from_json(directory):
     parser.add_argument("--v-coef", type=float, help="Value function coefficient")
     parser.add_argument("--parallelize", type=str2bool, help="Parallelize the environment")
     parser.add_argument("--n-envs", type=int, help="Parallelize the environment")
+    parser.add_argument("--clip-vloss", type=str2bool, default=True, help="Clip value loss")
 
     # Update
     parser.add_argument("--actor-lr", type=float, help="Actor lr")

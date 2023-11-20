@@ -11,13 +11,8 @@ Array = np.array
 
 
 @th.jit.script
-def standarize(x: Tensor) -> Tensor:
-    return (x - x.mean()) / (x.std() + 1e-8)
-
-
-@th.jit.script
 def normalize(x: Tensor) -> Tensor:
-    return (x - x.min()) / (x.max() - x.min() + 1e-8)
+    return (x - x.mean()) / (x.std() + 1e-8)
 
 
 def str2bool(v):
