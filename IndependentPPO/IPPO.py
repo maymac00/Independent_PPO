@@ -225,15 +225,16 @@ class IPPO:
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
             done = _array_to_dict_tensor(self.agents, done, self.device)
-            for k in self.agents:
-                self.buffer[k].store(
-                    observation[k],
-                    action[k],
-                    logprob[k],
-                    reward[k],
-                    s_value[k],
-                    done[k]
-                )
+            if not self.eval_mode:
+                for k in self.agents:
+                    self.buffer[k].store(
+                        observation[k],
+                        action[k],
+                        logprob[k],
+                        reward[k],
+                        s_value[k],
+                        done[k]
+                    )
 
             observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
 
