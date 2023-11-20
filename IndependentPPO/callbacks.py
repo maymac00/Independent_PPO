@@ -113,7 +113,6 @@ class TensorBoardLogging(UpdateCallback):
                 self.writer.add_scalar(key, value, self.ppo.run_metrics["global_step"])
 
 
-
 # Printing Wrappers:
 class PrintAverageReward(UpdateCallback):
 
