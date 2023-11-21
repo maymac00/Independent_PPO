@@ -443,6 +443,7 @@ class IPPO:
             os.makedirs(folder)
 
         print(f"Saving model in {folder}")
+        setattr(config, "saved_dir", folder)
 
         # Save the model
         for k in range(config.n_agents):

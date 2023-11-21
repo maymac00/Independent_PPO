@@ -54,7 +54,7 @@ args = {
     "clip_vloss": True,
 }
 
-args["tot_steps"] = 1000000
+args["tot_steps"] = 5000
 args["tag"] = "vloss_clip"
 
 ppo = IPPO(args, env=env)
