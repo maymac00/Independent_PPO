@@ -54,9 +54,6 @@ args = {
     "clip_vloss": True,
 }
 
-args["tot_steps"] = 5000
-args["tag"] = "vloss_clip"
-
 ppo = IPPO(args, env=env)
 ppo.addCallbacks(LearningRateDecay(ppo))
 ppo.addCallbacks(PrintAverageReward(ppo, 300))

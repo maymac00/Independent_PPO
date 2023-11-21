@@ -187,6 +187,7 @@ class IPPO:
                     v_clipped = b['values'] + th.clamp(values - b['values'], -self.clip, self.clip)
                     v_loss_clipped = (v_clipped - b['returns']) ** 2
                     critic_loss = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
+                    update_metrics[f"Agent_{k}/Critic Loss Unclipped"] = critic_loss.detach()
                 else:
                     # No value clipping
                     critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
@@ -194,7 +195,6 @@ class IPPO:
                 update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
 
                 critic_loss = critic_loss * self.v_coef
-                update_metrics[f"Agent_{k}/Critic Loss with V Coef"] = critic_loss.detach()
 
                 self.c_optim[k].zero_grad(True)
                 critic_loss.backward()
