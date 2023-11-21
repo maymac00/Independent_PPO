@@ -59,6 +59,7 @@ class IPPO:
             return agents
 
     def __init__(self, args, env, run_name=None):
+
         if type(args) is dict:
             args = argparse.Namespace(**args)
         elif type(args) is argparse.Namespace:
@@ -94,6 +95,7 @@ class IPPO:
         }
         self.update_metrics = {}
         self.sim_metrics = {}
+        self.folder = None
 
         #   Actor-Critic
         self.n_updates = None
@@ -443,6 +445,7 @@ class IPPO:
             os.makedirs(folder)
 
         print(f"Saving model in {folder}")
+        self.folder = folder
         setattr(config, "saved_dir", folder)
 
         # Save the model
