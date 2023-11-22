@@ -349,7 +349,7 @@ class IPPO:
                 self.run_metrics["avg_reward"].append(sim_metrics["reward_per_agent"].mean())
                 # Save mean reward per agent
                 for k in self.agents:
-                    self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][:,k].mean()
+                    self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][k]
             else:
                 with Manager() as manager:
                     d = manager.dict()
