@@ -96,6 +96,7 @@ class IPPO:
         self.update_metrics = {}
         self.sim_metrics = {}
         self.folder = None
+        self.eval_mode = False
 
         #   Actor-Critic
         self.n_updates = None

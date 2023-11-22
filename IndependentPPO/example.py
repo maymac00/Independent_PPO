@@ -10,7 +10,6 @@ from IndependentPPO.config import args_from_json
 import gym
 import matplotlib
 
-tiny["we"] = [1, 999]
 env = gym.make("MultiAgentEthicalGathering-v1", **tiny)
 
 args = {
