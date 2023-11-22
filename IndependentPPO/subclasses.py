@@ -30,20 +30,21 @@ class ParallelIPPO(IPPO):
             d = manager.dict()
             batch_size = int(self.n_steps / self.max_steps)
 
-            tasks = [(self.env, d, i) for i in range(batch_size)]
             solved = 0
             while solved < batch_size:
                 runs = min(self.n_envs, batch_size - solved)
                 # print("Running ", runs, " tasks")
+                tasks = [(self.env, d, global_id) for global_id in range(solved, solved + runs)]
                 with mp.Pool(runs) as p:
                     p.map(self._parallel_rollout, tasks[:runs])
                 # Remove solved tasks
                 solved += runs
-                tasks = tasks[runs:]
 
             # Fetch the logs
             sim_metrics = self._parallel_results(d, batch_size)
 
+            # We set the global env state of the environment to the first parallelized environment
+            self.env.__dict__.update(d[0]["env_state"])
             # Merge the results
             for k in self.agents:
                 self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
@@ -107,6 +108,7 @@ class ParallelIPPO(IPPO):
         # End of simulation
         data["reward_per_agent"] = ep_reward
         data["single_buffer"] = single_buffer
+        data["env_state"] = self.env.__dict__.items()
         result[env_id] = data
 
     def _parallel_results(self, d, batch_size):

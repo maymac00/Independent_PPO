@@ -61,7 +61,7 @@ ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
     0: {"actor_lr": 0.0003, "critic_lr": 0.004},
     1: {"actor_lr": 0.0001, "critic_lr": 0.0005},
 })
-ppo.addCallbacks(PrintAverageReward(ppo, 300))
+ppo.addCallbacks(PrintAverageReward(ppo, 30))
 ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.5, args["concavity_entropy"]))
 ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
 
