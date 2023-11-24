@@ -59,6 +59,7 @@ class IPPO:
             return agents
 
     def __init__(self, args, env, run_name=None):
+
         if type(args) is dict:
             args = argparse.Namespace(**args)
         elif type(args) is argparse.Namespace:
@@ -94,6 +95,8 @@ class IPPO:
         }
         self.update_metrics = {}
         self.sim_metrics = {}
+        self.folder = None
+        self.eval_mode = False
 
         #   Actor-Critic
         self.n_updates = None
@@ -176,6 +179,7 @@ class IPPO:
                     v_clipped = b['values'] + th.clamp(values - b['values'], -self.clip, self.clip)
                     v_loss_clipped = (v_clipped - b['returns']) ** 2
                     critic_loss = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
+                    update_metrics[f"Agent_{k}/Critic Loss Unclipped"] = critic_loss.detach()
                 else:
                     # No value clipping
                     critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
@@ -183,7 +187,6 @@ class IPPO:
                 update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
 
                 critic_loss = critic_loss * self.v_coef
-                update_metrics[f"Agent_{k}/Critic Loss with V Coef"] = critic_loss.detach()
 
                 self.c_optim[k].zero_grad(True)
                 critic_loss.backward()
@@ -226,15 +229,16 @@ class IPPO:
 
             reward = _array_to_dict_tensor(self.agents, reward, self.device)
             done = _array_to_dict_tensor(self.agents, done, self.device)
-            for k in self.agents:
-                self.buffer[k].store(
-                    observation[k],
-                    action[k],
-                    logprob[k],
-                    reward[k],
-                    s_value[k],
-                    done[k]
-                )
+            if not self.eval_mode:
+                for k in self.agents:
+                    self.buffer[k].store(
+                        observation[k],
+                        action[k],
+                        logprob[k],
+                        reward[k],
+                        s_value[k],
+                        done[k]
+                    )
 
             observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
 
@@ -356,6 +360,8 @@ class IPPO:
             os.makedirs(folder)
 
         print(f"Saving model in {folder}")
+        self.folder = folder
+        setattr(config, "saved_dir", folder)
 
         # Save the model
         for k in range(config.n_agents):

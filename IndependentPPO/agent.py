@@ -28,7 +28,7 @@ def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True)
     if init_weight_uniform:
         nn.init.xavier_uniform_(fc.weight, gain=gain)
     else:
-        nn.init.xavier_normal_(fc.weight, gain=gain)
+        nn.init.orthogonal_(fc.weight, gain=gain)
     nn.init.constant_(fc.bias, 0.00)
     return fc
 
