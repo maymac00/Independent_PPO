@@ -255,6 +255,7 @@ class IPPO:
         # Save mean reward per agent
         for k in self.agents:
             self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][k].mean()
+        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.agents[k]}/Reward"] for k in self.agents])
 
     def lr_decay(self):
         update = self.run_metrics["global_step"] / self.n_steps

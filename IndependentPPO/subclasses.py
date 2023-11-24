@@ -55,6 +55,8 @@ class ParallelIPPO(IPPO):
         for k in self.agents:
             self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = rew[:, k].mean()
 
+        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.agents[k]}/Reward"] for k in self.agents])
+
     def _parallel_rollout(self, tasks):
         env, result, env_id = tasks
         th.set_num_threads(1)

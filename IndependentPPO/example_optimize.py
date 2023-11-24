@@ -4,6 +4,7 @@ from EthicalGatheringGame.presets import tiny, small, medium, large
 from IndependentPPO.callbacks import AnnealEntropy
 
 from IndependentPPO.IPPO import IPPO
+from IndependentPPO.subclasses import ParallelIPPO
 from IndependentPPO.config import args_from_json
 import gym
 import matplotlib
@@ -17,7 +18,7 @@ args = {
     "max_steps": 500,
     "n_agents": 2,
     "n_steps": 2500,
-    "tot_steps": 5000000,
+    "tot_steps": 5000,
     "save_dir": "example_data",
     "early_stop": 15000000,
     "past_actions_memory": 0,
@@ -43,7 +44,8 @@ args = {
     "parallelize": True,
     "n_envs": 5,
     "h_layers": 2,
-    "load": None
+    "load": None,
+    "clip_vloss": True,
 }
 
 
@@ -53,7 +55,7 @@ def objective(trial):
     args["critic_lr"] = trial.suggest_float("critic_lr", 0.00005, 0.01)
     args["ent_coef"] = trial.suggest_float("ent_coef", 0.0001, 0.1)
     args["concavity-entropy"] = trial.suggest_float("concavity-entropy", 1.0, 3.5)
-    ppo = IPPO(args, env=env)
+    ppo = ParallelIPPO(args, env=env)
     ppo.addCallbacks([
         # PrintAverageReward(ppo, n=300),
         # TensorBoardLogging(ppo, log_dir="jro/EGG_DATA"),
@@ -62,9 +64,9 @@ def objective(trial):
     ppo.train()
     metric = 0
     ppo.eval_mode = True
-    for i in range(10): # Sim does n_steps so keep it low
+    for i in range(10):  # Sim does n_steps so keep it low
         rec = ppo.rollout()
-        metric += sum(rec["reward_per_agent"]) / args["n_agents"]
+        metric += sum(rec) / args["n_agents"]
     metric /= 10
     return metric
 
