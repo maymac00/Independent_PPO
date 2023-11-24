@@ -5,7 +5,7 @@ pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
 from EthicalGatheringGame import MAEGG
 from EthicalGatheringGame.presets import tiny, small, medium, large
 from IndependentPPO.IPPO import IPPO
-from IndependentPPO.callbacks import LearningRateDecay, AnnealEntropy, PrintAverageReward, TensorBoardLogging
+from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, TensorBoardLogging
 from IndependentPPO.config import args_from_json
 import gym
 import matplotlib
@@ -58,7 +58,6 @@ args["tot_steps"] = 1000000
 args["tag"] = "vloss_clip"
 
 ppo = IPPO(args, env=env)
-ppo.addCallbacks(LearningRateDecay(ppo))
 ppo.addCallbacks(PrintAverageReward(ppo, 300))
 ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.1, 3.5))
 ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))

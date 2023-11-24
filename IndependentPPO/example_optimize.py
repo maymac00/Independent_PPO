@@ -1,7 +1,7 @@
 import optuna
 from EthicalGatheringGame import MAEGG
 from EthicalGatheringGame.presets import tiny, small, medium, large
-from IndependentPPO.callbacks import LearningRateDecay, AnnealEntropy
+from IndependentPPO.callbacks import AnnealEntropy
 
 from IndependentPPO.IPPO import IPPO
 from IndependentPPO.config import args_from_json
@@ -55,7 +55,6 @@ def objective(trial):
     args["concavity-entropy"] = trial.suggest_float("concavity-entropy", 1.0, 3.5)
     ppo = IPPO(args, env=env)
     ppo.addCallbacks([
-        LearningRateDecay(ppo),
         # PrintAverageReward(ppo, n=300),
         # TensorBoardLogging(ppo, log_dir="jro/EGG_DATA"),
         AnnealEntropy(ppo),
@@ -64,7 +63,7 @@ def objective(trial):
     metric = 0
     ppo.eval_mode = True
     for i in range(10): # Sim does n_steps so keep it low
-        rec = ppo._sim()
+        rec = ppo.rollout()
         metric += sum(rec["reward_per_agent"]) / args["n_agents"]
     metric /= 10
     return metric

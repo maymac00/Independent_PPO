@@ -32,28 +32,6 @@ class UpdateCallback(Callback):
         pass
 
 
-class LearningRateDecay(UpdateCallback):
-
-    def __init__(self, ppo, decay=None, type="linear"):
-        super().__init__(ppo)
-        self.decay = decay
-        self.type = type
-
-    def after_update(self):
-        if self.type == "linear":
-            if self.decay is None:
-                update = self.ppo.run_metrics["global_step"] / self.ppo.n_steps
-                frac = 1.0 - (update - 1.0) / self.ppo.n_updates
-                self.ppo.actor_lr = frac * self.ppo.init_args.actor_lr
-                self.ppo.critic_lr = frac * self.ppo.init_args.critic_lr
-            else:
-                self.ppo.actor_lr *= self.decay
-                self.ppo.critic_lr *= self.decay
-
-    def before_update(self):
-        pass
-
-
 class AnnealEntropy(UpdateCallback):
     def __init__(self, ppo, base_value=1.0, final_value=0.1, concavity=3.5, type="linear_concave"):
         super().__init__(ppo)
