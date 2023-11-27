@@ -1,12 +1,12 @@
 import gym
 
-from IPPO import IPPO, _array_to_dict_tensor
+from IndependentPPO.IPPO import IPPO, _array_to_dict_tensor
 import torch as th
 import warnings
 import numpy as np
 import multiprocessing as mp
 from multiprocessing import Manager
-from utils.memory import merge_buffers, Buffer
+from IndependentPPO.utils.memory import merge_buffers, Buffer
 
 
 class ParallelIPPO(IPPO):
