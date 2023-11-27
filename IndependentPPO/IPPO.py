@@ -98,6 +98,9 @@ class IPPO:
         self.folder = None
         self.eval_mode = False
 
+        # Behaviours
+        self.lr_scheduler = None
+
         #   Actor-Critic
         self.n_updates = None
         self.buffer = None
@@ -302,7 +305,8 @@ class IPPO:
 
             self.update()
 
-            self.lr_decay()
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
         self._finish_training()
 
