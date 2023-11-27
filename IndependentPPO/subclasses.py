@@ -1,6 +1,6 @@
 import gym
 
-from IndependentPPO.IPPO import IPPO, _array_to_dict_tensor
+from IPPO import IPPO, _array_to_dict_tensor
 import torch as th
 import warnings
 import numpy as np
