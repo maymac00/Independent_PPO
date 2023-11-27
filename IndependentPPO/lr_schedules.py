@@ -42,5 +42,4 @@ class IndependentPPOAnnealing(LRScheduler):
 
         for k in self.initial_lr_rates_per_agent.keys():
             self.ppo.a_optim[k].param_groups[0]["lr"] = frac * self.initial_lr_rates_per_agent[k]["actor_lr"]
-            print(f"Agent {k} lr: {self.ppo.a_optim[k].param_groups[0]['lr']}")
             self.ppo.c_optim[k].param_groups[0]["lr"] = frac * self.initial_lr_rates_per_agent[k]["critic_lr"]
