@@ -1,6 +1,7 @@
 import argparse
 import copy
 import json
+import logging
 import time
 import warnings
 
@@ -22,6 +23,7 @@ from IndependentPPO.callbacks import UpdateCallback, Callback
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
 warnings.simplefilter(action='ignore', category=DeprecationWarning)
+
 
 # TODO: Different lr scheduler for agents. Callback to call optuna.report
 def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, astype: Type = th.float32) -> Dict:
@@ -59,6 +61,15 @@ class IPPO:
             return agents
 
     def __init__(self, args, env, run_name=None):
+
+        # Logging
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(logging.DEBUG)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        ch.setFormatter(formatter)
+        self.logger.addHandler(ch)
 
         if type(args) is dict:
             args = argparse.Namespace(**args)
@@ -260,16 +271,6 @@ class IPPO:
             self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][k].mean()
         return np.array([self.run_metrics["agent_performance"][f"Agent_{self.agents[k]}/Reward"] for k in self.agents])
 
-    def lr_decay(self):
-        update = self.run_metrics["global_step"] / self.n_steps
-        frac = 1.0 - (update - 1.0) / self.n_updates
-        self.actor_lr = frac * self.init_args.actor_lr
-        self.critic_lr = frac * self.init_args.critic_lr
-
-        for a_opt, c_opt in zip(self.a_optim.values(), self.c_optim.values()):
-            a_opt.param_groups[0]["lr"] = frac * self.actor_lr
-            c_opt.param_groups[0]["lr"] = frac * self.critic_lr
-
     def train(self):
         self.environment_setup()
         # set seed for training
@@ -295,6 +296,34 @@ class IPPO:
             'avg_reward': deque(maxlen=500),
             'agent_performance': {}
         }
+
+        # Log relevant info before training
+        self.logger.info(f"Training {self.run_name}")
+        self.logger.info("-------------------TRAIN----------------")
+        self.logger.info(f"Environment: {self.env}")
+        self.logger.info(f"Number of agents: {self.n_agents}")
+        self.logger.info(f"Number of steps: {self.n_steps}")
+        self.logger.info(f"Total steps: {self.tot_steps}")
+        self.logger.info(f"Number of hidden layers: {self.h_layers}")
+        self.logger.info(f"Number of hidden units: {self.h_size}")
+        self.logger.info("----------------------------------------")
+        self.logger.info(f"Actor learning rate: {self.actor_lr}")
+        self.logger.info(f"Critic learning rate: {self.critic_lr}")
+        self.logger.info(f"Entropy coefficient: {self.ent_coef}")
+        self.logger.info("-------------------CPV------------------")
+        self.logger.info(f"Clip: {self.clip}")
+        self.logger.info(f"Clip value loss: {self.clip_vloss}")
+        self.logger.info("-------------------ENT------------------")
+        self.logger.info(f"Anneal entropy: {self.anneal_entropy}")
+        self.logger.info(f"Concavity entropy: {self.concavity_entropy}")
+        self.logger.info("-------------------LRS------------------")
+        # Log learning rate scheduler
+        if self.lr_scheduler is not None:
+            self.logger.info(f"Learning rate scheduler: {self.lr_scheduler}")
+        else:
+            self.logger.info("No learning rate scheduler")
+        self.logger.info("----------------------------------------")
+        self.logger.info(f"Seed: {self.seed}")
 
         # Training loop
         self.n_updates = self.tot_steps // self.batch_size

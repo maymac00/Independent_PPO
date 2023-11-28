@@ -13,7 +13,7 @@ class ParallelIPPO(IPPO):
 
     def __init__(self, args, env, run_name=None):
         super().__init__(args, env, run_name)
-
+        self.logger.info("Parallelizing environments")
         self.parallelize = True
         main_process_threads = th.get_num_threads()
         if self.n_envs > main_process_threads:
