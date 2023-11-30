@@ -39,6 +39,7 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
 class IPPO:
     callbacks: List[Callback] = []
 
+
     @staticmethod
     def agents_from_file(folder, dev='cpu'):
         """
@@ -65,11 +66,13 @@ class IPPO:
         # Logging
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(logging.DEBUG)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        ch.setFormatter(formatter)
-        self.logger.addHandler(ch)
+        # Check if the logger already has a handler
+        if len(self.logger.handlers) == 0:
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            ch.setFormatter(formatter)
+            self.logger.addHandler(ch)
 
         if type(args) is dict:
             args = argparse.Namespace(**args)
@@ -87,7 +90,6 @@ class IPPO:
             # Get and format day and time
             timestamp = time.strftime("%m-%d_%H-%M", time.localtime())
             self.run_name = f"{self.env}__{self.tag}__{self.seed}__{timestamp}__{np.random.randint(0, 100)}"
-        print(f"Run name: {self.run_name}")
 
         # Action-Space
         self.o_size = None
@@ -357,7 +359,6 @@ class IPPO:
 
         self.o_size = self.env.observation_space.sample().shape[0]
         self.a_size = self.env.action_space.n
-        print(f"Observation space: {self.o_size}, Action space: {self.a_size}")
         # TODO: Set the action space, translate actions to env_actions
 
     def _finish_training(self):

@@ -7,14 +7,14 @@ from IndependentPPO.callbacks import AnnealEntropy, Report2Optuna, PrintAverageR
 from IndependentPPO.IPPO import IPPO
 from IndependentPPO.subclasses import ParallelIPPO
 from IndependentPPO.config import args_from_json
-from hypertuning import OptunaOptimizer
+from hypertuning import OptunaOptimizeMultiObjective
 import gym
 import matplotlib
 
 
-class OptimizerExample(OptunaOptimizer):
-    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None):
-        super().__init__(direction, study_name, save, n_trials, pruner)
+class OptimizerMOExample(OptunaOptimizeMultiObjective):
+    def __init__(self, direction, study_name=None, save=None, n_trials=4):
+        super().__init__(direction, study_name, save, n_trials)
 
     def objective(self, trial):
         args = {
@@ -67,7 +67,6 @@ class OptimizerExample(OptunaOptimizer):
         ppo.addCallbacks([
             PrintAverageReward(ppo, n=150),
             # TensorBoardLogging(ppo, log_dir="jro/EGG_DATA"),
-            Report2Optuna(ppo, trial,1),
             AnnealEntropy(ppo),
         ])
 
@@ -76,21 +75,11 @@ class OptimizerExample(OptunaOptimizer):
         ppo.eval_mode = True
         for i in range(1):  # Sim does n_steps so keep it low
             rec = ppo.rollout()
-            metric += sum(rec) / rec.shape[0]
+            metric += rec
         metric /= 1
-        return metric
-
-    def pre_trial_callback(self):
-        print("Pre trial callback")
-
-    def pre_objective_callback(self, trial):
-        print("Pre objective callback")
-
-    def post_trial_callback(self, trial, value):
-        print("Post trial callback")
+        return tuple(metric)
 
 
 if __name__ == "__main__":
-    optimizer = OptimizerExample(["maximize", "maximize"], n_trials=50, save="example_data/optuna", study_name="test",
-                                 pruner=optuna.pruners.MedianPruner())
+    optimizer = OptimizerMOExample(["maximize", "maximize"], save="example_data/optuna", study_name="test_MO")
     optimizer.optimize()

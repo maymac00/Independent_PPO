@@ -91,6 +91,25 @@ class TensorBoardLogging(UpdateCallback):
                 self.writer.add_scalar(key, value, self.ppo.run_metrics["global_step"])
 
 
+class Report2Optuna(UpdateCallback):
+    def __init__(self, ppo, trial, n=1000):
+        super().__init__(ppo)
+        self.trial = trial
+        self.n = n
+
+    def after_update(self):
+        if self.ppo.run_metrics["ep_count"] % self.n == 0:
+            self.trial.report(self.ppo.run_metrics["avg_reward"][-1], self.ppo.run_metrics["global_step"])
+
+        if self.trial.should_prune():
+            import optuna
+            print(f"Trial {self.trial.number} pruned at step {self.ppo.run_metrics['global_step']} with value {self.ppo.run_metrics['avg_reward'][-1]}.")
+            raise optuna.TrialPruned()
+
+    def before_update(self):
+        pass
+
+
 # Printing Wrappers:
 class PrintAverageReward(UpdateCallback):
 
