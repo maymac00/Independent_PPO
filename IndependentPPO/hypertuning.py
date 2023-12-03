@@ -123,6 +123,7 @@ class OptunaOptimizeMultiObjective(abc.ABC):
     def optimize(self):
         for _ in range(self.n_trials):  # Number of iterations you want to control
             # Run a single trial per iteration
+
             self.study.optimize(self.objective, n_trials=1)
 
             last_trial = self.study.trials[-1]

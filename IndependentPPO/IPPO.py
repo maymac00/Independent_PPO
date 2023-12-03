@@ -397,6 +397,7 @@ class IPPO:
         print(f"Saving model in {folder}")
         self.folder = folder
         setattr(config, "saved_dir", folder)
+        setattr(self, "saved_dir", folder)
 
         # Save the model
         for k in range(config.n_agents):
