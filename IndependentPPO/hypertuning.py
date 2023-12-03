@@ -127,9 +127,3 @@ class OptunaOptimizeMultiObjective(abc.ABC):
             self.study.optimize(self.objective, n_trials=1)
 
             last_trial = self.study.trials[-1]
-
-            # Now you can use last_trial for further logic
-            # For example, print its number and values
-            print(f"Trial number: {last_trial.number}, Values: {last_trial.values}")
-
-
