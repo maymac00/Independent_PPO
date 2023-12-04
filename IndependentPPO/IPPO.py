@@ -25,7 +25,6 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 warnings.simplefilter(action='ignore', category=DeprecationWarning)
 
 
-# TODO: Different lr scheduler for agents. Callback to call optuna.report
 def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, astype: Type = th.float32) -> Dict:
     # Check if the provided device is already the current device
     is_same_device = (device == th.cuda.current_device()) if device.type == 'cuda' else (device == th.device('cpu'))
