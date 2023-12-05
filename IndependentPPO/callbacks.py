@@ -58,6 +58,19 @@ class AnnealEntropy(UpdateCallback):
             self.ppo.entropy_value = frac * self.ppo.init_args.ent_coef
 
 
+class SaveCheckpoint(UpdateCallback):
+    def __init__(self, ppo, n=1000):
+        super().__init__(ppo)
+        self.n = n
+
+    def before_update(self):
+        pass
+
+    def after_update(self):
+        if self.ppo.run_metrics["ep_count"] % self.n == 0:
+            self.ppo.save_experiment_data(ckpt=True)
+
+
 class TensorBoardLogging(UpdateCallback):
     def __init__(self, ppo, log_dir):
         super().__init__(ppo)
@@ -103,7 +116,8 @@ class Report2Optuna(UpdateCallback):
 
         if self.trial.should_prune():
             import optuna
-            print(f"Trial {self.trial.number} pruned at step {self.ppo.run_metrics['global_step']} with value {self.ppo.run_metrics['avg_reward'][-1]}.")
+            print(
+                f"Trial {self.trial.number} pruned at step {self.ppo.run_metrics['global_step']} with value {self.ppo.run_metrics['avg_reward'][-1]}.")
             raise optuna.TrialPruned()
 
     def before_update(self):

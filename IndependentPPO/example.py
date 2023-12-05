@@ -7,7 +7,7 @@ from EthicalGatheringGame.presets import tiny, small, medium, large
 from EthicalGatheringGame.wrappers import NormalizeReward
 from IndependentPPO.IPPO import IPPO
 from IndependentPPO.subclasses import ParallelIPPO
-from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, TensorBoardLogging
+from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, TensorBoardLogging, SaveCheckpoint
 from IndependentPPO.lr_schedules import DefaultPPOAnnealing, IndependentPPOAnnealing
 from IndependentPPO.config import args_from_json
 import gym
@@ -64,6 +64,7 @@ ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
 ppo.addCallbacks(PrintAverageReward(ppo, 30))
 ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.5, args["concavity_entropy"]))
 ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
+ppo.addCallbacks(SaveCheckpoint(ppo, 1))
 
 import time
 t0 = time.time()
