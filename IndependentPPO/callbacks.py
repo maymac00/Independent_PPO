@@ -4,6 +4,7 @@ from abc import abstractmethod
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from abc import ABC, abstractmethod
+import sqlite3
 
 
 class Callback(ABC):
@@ -112,7 +113,14 @@ class Report2Optuna(UpdateCallback):
 
     def after_update(self):
         if self.ppo.run_metrics["ep_count"] % self.n == 0:
-            self.trial.report(self.ppo.run_metrics["avg_reward"][-1], self.ppo.run_metrics["global_step"])
+            for i in range(5):
+                try:
+                    self.trial.report(self.ppo.run_metrics["avg_reward"][-1], self.ppo.run_metrics["global_step"])
+                    break
+                except sqlite3.OperationalError as e:
+                    print(e)
+                    print("Waiting 5 seconds to retry...")
+                    time.sleep(5)
 
         if self.trial.should_prune():
             import optuna
