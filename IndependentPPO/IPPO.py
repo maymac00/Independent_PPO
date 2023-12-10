@@ -211,7 +211,7 @@ class IPPO:
             update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
         mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] for k in self.agents]).mean()
-        self.run_metrics["Mean loss accross agents"] = mean_loss
+        self.run_metrics["Mean loss across agents"] = mean_loss
 
         # Run callbacks
         for c in IPPO.callbacks:
