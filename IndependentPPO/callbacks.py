@@ -110,21 +110,30 @@ class TensorBoardLogging(UpdateCallback):
 
 
 class Report2Optuna(UpdateCallback):
-    def __init__(self, ppo, trial, n=1000):
+    def __init__(self, ppo, trial, n=1000, type="mean_reward"):
         super().__init__(ppo)
         self.trial = trial
         self.n = n
+        self.type = type
 
     def after_update(self):
         if self.ppo.run_metrics["ep_count"] % self.n == 0:
             for i in range(5):
                 try:
-                    self.trial.report(self.ppo.run_metrics["avg_reward"][-1], self.ppo.run_metrics["global_step"])
+                    if self.type == "mean_reward":
+                        self.trial.report(self.ppo.run_metrics["avg_reward"][-1], self.ppo.run_metrics["global_step"])
+                    elif self.type == "mean_loss":
+                        self.trial.report(np.array(self.ppo.run_metrics["mean_loss"]).mean(),
+                                          self.ppo.run_metrics["global_step"])
+                    else:
+                        raise NotImplementedError
                     break
                 except sqlite3.OperationalError as e:
                     print(e)
                     print("Waiting 5 seconds to retry...")
                     time.sleep(5)
+                except NotImplementedError:
+                    raise NotImplementedError(f"Report type {self.type} not implemented.")
 
         if self.trial.should_prune():
             import optuna
