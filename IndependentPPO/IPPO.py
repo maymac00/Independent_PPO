@@ -168,7 +168,7 @@ class IPPO:
                 if self.norm_adv: mb_advantages = normalize(mb_advantages)
 
                 actor_loss = mb_advantages * ratio
-                update_metrics[f"Agent_{k}/Non-Clipped Actor Loss"] = actor_loss.mean().detach()
+                update_metrics[f"Agent_{k}/Actor Loss Non-Clipped"] = actor_loss.mean().detach()
 
                 actor_clip_loss = mb_advantages * th.clamp(ratio, 1 - self.clip, 1 + self.clip)
                 # Calculate clip fraction
@@ -193,7 +193,7 @@ class IPPO:
                     v_clipped = b['values'] + th.clamp(values - b['values'], -self.clip, self.clip)
                     v_loss_clipped = (v_clipped - b['returns']) ** 2
                     critic_loss = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
-                    update_metrics[f"Agent_{k}/Critic Loss Unclipped"] = critic_loss.detach()
+                    update_metrics[f"Agent_{k}/Critic Loss Non-Clipped"] = critic_loss.detach()
                 else:
                     # No value clipping
                     critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
@@ -210,6 +210,8 @@ class IPPO:
             loss = actor_loss - entropy_loss * self.entropy_value + critic_loss * self.v_coef
             update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
+        mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] for k in self.agents]).mean()
+        self.run_metrics["Mean loss accross agents"] = mean_loss
 
         # Run callbacks
         for c in IPPO.callbacks:
