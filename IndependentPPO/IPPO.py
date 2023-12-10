@@ -38,7 +38,6 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
 class IPPO:
     callbacks: List[Callback] = []
 
-
     @staticmethod
     def agents_from_file(folder, dev='cpu'):
         """
@@ -209,7 +208,7 @@ class IPPO:
                 self.c_optim[k].step()
 
             loss = actor_loss - entropy_loss * self.entropy_value + critic_loss * self.v_coef
-            update_metrics[f"Agent_{k}/Loss"] = critic_loss.detach()
+            update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
 
         # Run callbacks
