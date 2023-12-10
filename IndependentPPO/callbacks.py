@@ -95,8 +95,8 @@ class TensorBoardLogging(UpdateCallback):
         self.writer.add_scalar("Training/SPS",
                                self.ppo.n_steps / (time.time() - self.ppo.run_metrics["sim_start_time"]),
                                self.ppo.run_metrics["global_step"])
-        self.writer.add_scalar("Training/Loss",
-                               self.ppo.run_metrics["Mean loss across agents"],
+        self.writer.add_scalar("Training/Mean loss across agents",
+                               np.array(self.ppo.run_metrics["mean_loss"]).mean(),
                                self.ppo.run_metrics["global_step"])
 
         for k, v in self.ppo.run_metrics["agent_performance"].items():

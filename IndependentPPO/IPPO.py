@@ -95,15 +95,7 @@ class IPPO:
 
         # Attributes
         self.agents = range(self.n_agents)
-        self.run_metrics = {
-            'global_step': 0,
-            'ep_count': 0,
-            'start_time': time.time(),
-            'reward_q': [],
-            'reward_per_agent': [],
-            'avg_reward': [],
-            'sim_start_time': time.time(),
-        }
+        self.run_metrics = None
         self.update_metrics = {}
         self.sim_metrics = {}
         self.folder = None
@@ -211,7 +203,7 @@ class IPPO:
             update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
         mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] for k in self.agents]).mean()
-        self.run_metrics["Mean loss across agents"] = mean_loss
+        self.run_metrics["mean_loss"].append(mean_loss)
 
         # Run callbacks
         for c in IPPO.callbacks:
@@ -296,7 +288,8 @@ class IPPO:
             'ep_count': 0,
             'start_time': time.time(),
             'avg_reward': deque(maxlen=500),
-            'agent_performance': {}
+            'agent_performance': {},
+            'mean_loss': deque(maxlen=500),
         }
 
         # Log relevant info before training
