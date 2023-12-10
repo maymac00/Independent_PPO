@@ -69,6 +69,7 @@ class OptunaOptimizer(abc.ABC):
             except Exception as e:
                 # Handle other exceptions
                 self.study.tell(trial, state=optuna.trial.TrialState.FAIL)
+                print(f"Trial {i} failed with exception {e}.")
                 continue
 
             self.study.tell(trial, value)
