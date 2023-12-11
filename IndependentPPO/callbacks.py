@@ -123,7 +123,7 @@ class Report2Optuna(UpdateCallback):
                     if self.type == "mean_reward":
                         self.trial.report(self.ppo.run_metrics["avg_reward"][-1], self.ppo.run_metrics["global_step"])
                     elif self.type == "mean_loss":
-                        self.trial.report(np.array(self.ppo.run_metrics["mean_loss"]).mean(),
+                        self.trial.report(abs(np.array(self.ppo.run_metrics["mean_loss"]).mean()),
                                           self.ppo.run_metrics["global_step"])
                     else:
                         raise NotImplementedError
