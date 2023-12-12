@@ -14,6 +14,8 @@ class OptunaOptimizer(abc.ABC):
         self.direction = direction
         if isinstance(direction, list):
             raise NotImplementedError("Multi-objective optimization is not implemented in this class")
+        if pruner is None:
+            self.pruner = optuna.pruners.NopPruner()
         self.pruner = pruner
         # optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
 
