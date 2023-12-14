@@ -46,17 +46,17 @@ class ParallelIPPO(IPPO):
             # We set the global env state of the environment to the first parallelized environment
             self.env.__dict__.update(d[0]["env_state"])
             # Merge the results
-            for k in self.agents:
+            for k in self.r_agents:
                 self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
         self.run_metrics['ep_count'] += solved
         self.run_metrics['global_step'] += solved * self.max_steps
         rew = np.array([s["reward_per_agent"] for s in sim_metrics])
         self.run_metrics['avg_reward'].append(rew.mean())
         # Save mean reward per agent
-        for k in self.agents:
+        for k in self.r_agents:
             self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = rew[:, k].mean()
 
-        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.agents[k]}/Reward"] for k in self.agents])
+        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
 
     def _parallel_rollout(self, tasks):
         env, result, env_id = tasks
@@ -64,36 +64,36 @@ class ParallelIPPO(IPPO):
         data = {"global_step": self.run_metrics["global_step"], "reward_per_agent": None}
 
         single_buffer = {k: Buffer(self.o_size, self.max_steps, self.max_steps, self.gamma,
-                                   self.gae_lambda, self.device) for k in self.agents}
+                                   self.gae_lambda, self.device) for k in self.r_agents}
 
         data["global_step"] += env_id * self.max_steps
 
         observation = self.environment_reset(env=env)
 
-        action, logprob, s_value = [{k: 0 for k in self.agents} for _ in range(3)]
+        action, logprob, s_value = [{k: 0 for k in self.r_agents} for _ in range(3)]
         env_action, ep_reward = [np.zeros(self.n_agents) for _ in range(2)]
 
         for step in range(self.max_steps):
             data["global_step"] += 1
 
             with th.no_grad():
-                for k in self.agents:
+                for k in self.r_agents:
                     (
                         env_action[k],
                         action[k],
                         logprob[k],
                         _,
-                    ) = self.actor[k].get_action(observation[k])
+                    ) = self.agents[k].actor.get_action(observation[k])
 
-                    s_value[k] = self.critic[k](observation[k])
+                    s_value[k] = self.agents[k].critic(observation[k])
 
             non_tensor_observation, reward, done, info = env.step(env_action)
 
             ep_reward += reward
 
-            reward = _array_to_dict_tensor(self.agents, reward, self.device)
-            done = _array_to_dict_tensor(self.agents, done, self.device)
-            for k in self.agents:
+            reward = _array_to_dict_tensor(self.r_agents, reward, self.device)
+            done = _array_to_dict_tensor(self.r_agents, done, self.device)
+            for k in self.r_agents:
                 single_buffer[k].store(
                     observation[k],
                     action[k],
@@ -103,7 +103,7 @@ class ParallelIPPO(IPPO):
                     done[k]
                 )
 
-            observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
+            observation = _array_to_dict_tensor(self.r_agents, non_tensor_observation, self.device)
 
         # End of simulation
         data["reward_per_agent"] = ep_reward

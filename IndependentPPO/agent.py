@@ -1,3 +1,4 @@
+from torch import optim
 from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +7,29 @@ from IndependentPPO.ActionSelection import *
 from IndependentPPO.utils.misc import *
 
 ACTIONS = [0, 1, 2, 3, 4, 5, 6]
+
+
+class Agent:
+    def __init__(self, actor, critic, actor_lr, critic_lr):
+        self.actor = actor
+        self.critic = critic
+        self.a_optimizer = optim.Adam(list(self.actor.parameters()), lr=actor_lr, eps=1e-5)
+        self.c_optimizer = optim.Adam(list(self.critic.parameters()), lr=critic_lr, eps=1e-5)
+        self.device = next(self.actor.parameters()).device
+        assert self.device == next(self.critic.parameters()).device
+
+        self.save_dir = None
+
+    def freeze(self):
+        self.actor.freeze()
+        self.critic.freeze()
+
+    def unfreeze(self):
+        self.actor.unfreeze()
+        self.critic.unfreeze()
+
+    def isFrozen(self):
+        return not self.actor.parameters().__next__().requires_grad
 
 
 def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True):
@@ -80,6 +104,14 @@ class SoftmaxActor(nn.Module):
             action = SoftmaxActor.action_selection(np.array(prob, dtype='float64').squeeze())
         return ACTIONS[action]
 
+    def freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def unfreeze(self):
+        for param in self.parameters():
+            param.requires_grad = True
+
 
 class Critic(nn.Module):
     def __init__(self, o_size: int, h_size: int, h_layers: int):
@@ -96,6 +128,14 @@ class Critic(nn.Module):
             l = self.hidden[i]
             x = F.leaky_relu(l(x))
         return self.output(x)
+
+    def freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def unfreeze(self):
+        for param in self.parameters():
+            param.requires_grad = True
 
 
 class RecSoftmaxActor(SoftmaxActor):

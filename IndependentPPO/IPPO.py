@@ -9,7 +9,7 @@ from collections import deque
 
 from torch import optim
 
-from IndependentPPO.agent import SoftmaxActor, Critic
+from IndependentPPO.agent import SoftmaxActor, Critic, Agent
 
 from IndependentPPO.utils.memory import Buffer, merge_buffers
 from IndependentPPO.utils.misc import *
@@ -39,7 +39,7 @@ class IPPO:
     callbacks: List[Callback] = []
 
     @staticmethod
-    def agents_from_file(folder, dev='cpu'):
+    def actors_from_file(folder, dev='cpu'):
         """
         Creates the agents from the folder's model, and returns them set to eval mode.
         It is assumed that the model is a SoftmaxActor from file agent.py which only has hidden layers and an output layer.
@@ -90,11 +90,11 @@ class IPPO:
             self.run_name = f"{self.env}__{self.tag}__{self.seed}__{timestamp}__{np.random.randint(0, 100)}"
 
         # Action-Space
-        self.o_size = None
-        self.a_size = 7
+        self.o_size = env.observation_space.sample().shape[0]
+        self.a_size = env.action_space.n
 
         # Attributes
-        self.agents = range(self.n_agents)
+        self.r_agents = range(self.n_agents)
         self.run_metrics = None
         self.update_metrics = {}
         self.sim_metrics = {}
@@ -104,26 +104,34 @@ class IPPO:
         # Behaviours
         self.lr_scheduler = None
 
+        #   Torch init
+        self.device = set_torch(self.n_cpus, self.cuda)
+
         #   Actor-Critic
         self.n_updates = None
         self.buffer = None
-        self.c_optim = None
-        self.a_optim = None
-        self.critic = {}
-        self.actor = {}
+        self.agents, self.buffer = {}, {}
 
-        #   Torch init
-        self.device = set_torch(self.n_cpus, self.cuda)
+        for k in self.r_agents:
+            self.agents[k] = Agent(
+                SoftmaxActor(self.o_size, self.a_size, self.h_size, self.h_layers).to(self.device),
+                Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
+                self.actor_lr,
+                self.critic_lr,
+            )
+            self.buffer[k] = Buffer(self.o_size, self.n_steps, self.max_steps, self.gamma,
+                                    self.gae_lambda, self.device)
+
         self.env = env
 
     def environment_reset(self, env=None):
         if env is None:
             non_tensor_observation, info = self.env.reset()
-            observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
+            observation = _array_to_dict_tensor(self.r_agents, non_tensor_observation, self.device)
             return observation
         else:
             non_tensor_observation, info = env.reset()
-            observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
+            observation = _array_to_dict_tensor(self.r_agents, non_tensor_observation, self.device)
             return observation
 
     def update(self):
@@ -136,18 +144,20 @@ class IPPO:
         update_metrics = {}
 
         with th.no_grad():
-            for k in self.agents:
-                value_ = self.critic[k](self.environment_reset()[k])
+            for k in self.r_agents:
+                value_ = self.agents[k].critic(self.environment_reset()[k])
                 self.buffer[k].compute_mc(value_.reshape(-1))
 
         # Optimize the policy and value networks
-        for k in self.agents:
+        for k in self.r_agents:
+            if self.agents[k].isFrozen():
+                continue
             b = self.buffer[k].sample()
             self.buffer[k].clear()
 
             # Actor optimization
             for epoch in range(self.n_epochs):
-                _, _, logprob, entropy = self.actor[k].get_action(b['observations'], b['actions'])
+                _, _, logprob, entropy = self.agents[k].actor.get_action(b['observations'], b['actions'])
                 entropy_loss = entropy.mean()
 
                 update_metrics[f"Agent_{k}/Entropy"] = entropy_loss.detach()
@@ -170,14 +180,14 @@ class IPPO:
                 actor_loss = -actor_loss - self.ent_coef * entropy_loss
                 update_metrics[f"Agent_{k}/Actor Loss with Entropy"] = actor_loss.detach()
 
-                self.a_optim[k].zero_grad(True)
+                self.agents[k].a_optimizer.zero_grad(True)
                 actor_loss.backward()
-                nn.utils.clip_grad_norm_(self.actor[k].parameters(), self.max_grad_norm)
-                self.a_optim[k].step()
+                nn.utils.clip_grad_norm_(self.agents[k].actor.parameters(), self.max_grad_norm)
+                self.agents[k].a_optimizer.step()
 
             # Critic optimization
             for epoch in range(self.n_epochs * self.critic_times):
-                values = self.critic[k](b['observations']).squeeze()
+                values = self.agents[k].critic(b['observations']).squeeze()
 
                 # Value clipping
                 if self.clip_vloss:
@@ -194,15 +204,15 @@ class IPPO:
 
                 critic_loss = critic_loss * self.v_coef
 
-                self.c_optim[k].zero_grad(True)
+                self.agents[k].c_optimizer.zero_grad(True)
                 critic_loss.backward()
-                nn.utils.clip_grad_norm_(self.critic[k].parameters(), self.max_grad_norm)
-                self.c_optim[k].step()
+                nn.utils.clip_grad_norm_(self.agents[k].critic.parameters(), self.max_grad_norm)
+                self.agents[k].c_optimizer.step()
 
             loss = actor_loss - entropy_loss * self.entropy_value + critic_loss * self.v_coef
             update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
-        mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] for k in self.agents]).mean()
+        mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in self.r_agents]).mean()
         self.run_metrics["mean_loss"].append(mean_loss)
 
         # Run callbacks
@@ -217,28 +227,28 @@ class IPPO:
 
         observation = self.environment_reset()
 
-        action, logprob, s_value = [{k: 0 for k in self.agents} for _ in range(3)]
+        action, logprob, s_value = [{k: 0 for k in self.r_agents} for _ in range(3)]
         env_action, ep_reward = [np.zeros(self.n_agents) for _ in range(2)]
 
         for step in range(self.n_steps):
             self.run_metrics["global_step"] += 1
 
             with th.no_grad():
-                for k in self.agents:
+                for k in self.r_agents:
                     (
                         env_action[k],
                         action[k],
                         logprob[k],
                         _,
-                    ) = self.actor[k].get_action(observation[k])
+                    ) = self.agents[k].actor.get_action(observation[k])
             # TODO: Change action -> env_action mapping
             non_tensor_observation, reward, done, info = self.env.step(env_action)
             ep_reward += reward
 
-            reward = _array_to_dict_tensor(self.agents, reward, self.device)
-            done = _array_to_dict_tensor(self.agents, done, self.device)
+            reward = _array_to_dict_tensor(self.r_agents, reward, self.device)
+            done = _array_to_dict_tensor(self.r_agents, done, self.device)
             if not self.eval_mode:
-                for k in self.agents:
+                for k in self.r_agents:
                     self.buffer[k].store(
                         observation[k],
                         action[k],
@@ -248,7 +258,7 @@ class IPPO:
                         done[k]
                     )
 
-            observation = _array_to_dict_tensor(self.agents, non_tensor_observation, self.device)
+            observation = _array_to_dict_tensor(self.r_agents, non_tensor_observation, self.device)
 
             # End of sim
             if all(list(done.values())):
@@ -261,26 +271,14 @@ class IPPO:
 
         self.run_metrics["avg_reward"].append(sim_metrics["reward_per_agent"].mean())
         # Save mean reward per agent
-        for k in self.agents:
+        for k in self.r_agents:
             self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][k].mean()
-        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.agents[k]}/Reward"] for k in self.agents])
+        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
 
     def train(self):
         self.environment_setup()
         # set seed for training
         set_seeds(self.seed, self.th_deterministic)
-
-        # Init actor-critic setup
-        self.actor, self.critic, self.a_optim, self.c_optim, self.buffer = {}, {}, {}, {}, {}
-
-        for k in self.agents:
-            self.actor[k] = SoftmaxActor(self.o_size, self.a_size, self.h_size, self.h_layers).to(
-                self.device)
-            self.a_optim[k] = optim.Adam(list(self.actor[k].parameters()), lr=self.actor_lr, eps=1e-5)
-            self.critic[k] = Critic(self.o_size, self.h_size, self.h_layers).to(self.device)
-            self.c_optim[k] = optim.Adam(list(self.critic[k].parameters()), lr=self.critic_lr, eps=1e-5)
-            self.buffer[k] = Buffer(self.o_size, self.n_steps, self.max_steps, self.gamma,
-                                    self.gae_lambda, self.device)
 
         # Reset run metrics:
         self.run_metrics = {
@@ -355,6 +353,14 @@ class IPPO:
         # TODO: Set the action space, translate actions to env_actions
 
     def _finish_training(self):
+        # Log relevant data from training
+        self.logger.info(f"Training finished in {time.time() - self.run_metrics['start_time']} seconds")
+        self.logger.info(f"Average reward: {np.mean(self.run_metrics['avg_reward'])}")
+        self.logger.info(f"Average loss: {np.mean(self.run_metrics['mean_loss'])}")
+        self.logger.info(f"Std mean loss: {np.std(self.run_metrics['mean_loss'])}")
+        self.logger.info(f"Number of episodes: {self.run_metrics['ep_count']}")
+        self.logger.info(f"Number of updates: {self.n_updates}")
+
         self.save_experiment_data()
 
     def save_experiment_data(self, folder=None, ckpt=False):
@@ -393,9 +399,10 @@ class IPPO:
         setattr(self, "saved_dir", folder)
 
         # Save the model
-        for k in range(config.n_agents):
-            th.save(self.actor[k].state_dict(), folder + f"/actor_{k}.pth")
-            th.save(self.critic[k].state_dict(), folder + f"/critic_{k}.pth")
+        for k in self.r_agents:
+            th.save(self.agents[k].actor.state_dict(), folder + f"/actor_{k}.pth")
+            th.save(self.agents[k].critic.state_dict(), folder + f"/critic_{k}.pth")
+            self.agents[k].save_dir = folder
 
         # Save the args as a json file
         with open(folder + "/config.json", "w") as f:
