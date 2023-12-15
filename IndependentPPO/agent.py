@@ -31,6 +31,12 @@ class Agent:
     def isFrozen(self):
         return not self.actor.parameters().__next__().requires_grad
 
+    def getId(self):
+        # Hash the sum of the layers of both actor and critic
+        s = sum([self.actor.hidden[i].weight.sum() for i in range(len(self.actor.hidden))])
+        s += sum([self.critic.hidden[i].weight.sum() for i in range(len(self.critic.hidden))])
+        return hash(float(s))
+
 
 def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True):
     """

@@ -63,7 +63,7 @@ class IPPO:
 
         # Logging
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.ERROR)
         # Check if the logger already has a handler
         if len(self.logger.handlers) == 0:
             ch = logging.StreamHandler()
@@ -79,7 +79,8 @@ class IPPO:
         elif type(args) is str:
             args = IndependentPPO.config.args_from_json(args)
         self.init_args = args
-        for k, v in args.__dict__.items():
+
+        for k, v in self.init_args.__dict__.items():
             setattr(self, k, v)
         self.entropy_value = self.ent_coef
         if run_name is not None:
@@ -87,7 +88,7 @@ class IPPO:
         else:
             # Get and format day and time
             timestamp = time.strftime("%m-%d_%H-%M", time.localtime())
-            self.run_name = f"{self.env}__{self.tag}__{self.seed}__{timestamp}__{np.random.randint(0, 100)}"
+            self.run_name = f"{self.env_name}__{self.tag}__{self.seed}__{timestamp}__{np.random.randint(0, 100)}"
 
         # Action-Space
         self.o_size = env.observation_space.sample().shape[0]
@@ -150,10 +151,10 @@ class IPPO:
 
         # Optimize the policy and value networks
         for k in self.r_agents:
+            self.buffer[k].clear()
             if self.agents[k].isFrozen():
                 continue
             b = self.buffer[k].sample()
-            self.buffer[k].clear()
 
             # Actor optimization
             for epoch in range(self.n_epochs):
@@ -212,7 +213,8 @@ class IPPO:
             loss = actor_loss - entropy_loss * self.entropy_value + critic_loss * self.v_coef
             update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
-        mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in self.r_agents]).mean()
+        mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in
+                              self.r_agents]).mean()
         self.run_metrics["mean_loss"].append(mean_loss)
 
         # Run callbacks
@@ -273,13 +275,33 @@ class IPPO:
         # Save mean reward per agent
         for k in self.r_agents:
             self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][k].mean()
-        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
+        return np.array(
+            [self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
 
-    def train(self):
+    def train(self, reset=True, set_agents=None):
         self.environment_setup()
         # set seed for training
         set_seeds(self.seed, self.th_deterministic)
 
+        if reset:
+            for k, v in self.init_args.__dict__.items():
+                setattr(self, k, v)
+        if set_agents is None:
+            for k in self.r_agents:
+                self.agents[k] = Agent(
+                    SoftmaxActor(self.o_size, self.a_size, self.h_size, self.h_layers).to(self.device),
+                    Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
+                    self.init_args.actor_lr,
+                    self.init_args.critic_lr,
+                )
+                self.buffer[k] = Buffer(self.o_size, self.n_steps, self.max_steps, self.gamma,
+                                        self.gae_lambda, self.device)
+        else:
+            self.agents = set_agents
+
+        for k, ag in self.agents.items():
+            print(f"Agent {k} " + ("is Frozen" if ag.isFrozen() else "is not Frozen"))
+            print(f"Value of pi_t_{k} : {ag.getId()}")
         # Reset run metrics:
         self.run_metrics = {
             'global_step': 0,
@@ -329,6 +351,10 @@ class IPPO:
 
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
+
+        for k, ag in self.agents.items():
+            print(f"Agent {k} " + ("is Frozen" if ag.isFrozen() else "is not Frozen"))
+            print(f"Value of pi_t+1_{k} : {ag.getId()}")
 
         self._finish_training()
 

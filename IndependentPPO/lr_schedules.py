@@ -17,8 +17,8 @@ class DefaultPPOAnnealing(LRScheduler):
         self.ppo.critic_lr = frac * self.ppo.init_args.critic_lr
 
         for ag in self.ppo.agents:
-            ag.a_optimizer.param_groups[0]["lr"] = frac * self.ppo.actor_lr
-            ag.c_optimizer.param_groups[0]["lr"] = frac * self.ppo.critic_lr
+            ag.a_optimizer.param_groups[0]["lr"] = frac * self.ppo.init_args.actor_lr
+            ag.c_optimizer.param_groups[0]["lr"] = frac * self.ppo.init_args.critic_lr
 
 
 class IndependentPPOAnnealing(LRScheduler):
