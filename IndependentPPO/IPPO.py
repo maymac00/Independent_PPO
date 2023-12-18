@@ -442,3 +442,23 @@ class IPPO:
             IPPO.callbacks.append(callbacks)
         else:
             raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
+
+    def load_checkpoint(self, folder):
+        # Load the args from the folder
+        with open(folder + "/config.json", "r") as f:
+            args = argparse.Namespace(**json.load(f))
+            # Load the model
+            agents = {}
+            for k in range(args.n_agents):
+                model_actor = th.load(folder + f"/actor_{k}.pth")
+                o_size = model_actor["hidden.0.weight"].shape[1]
+                a_size = model_actor["output.weight"].shape[0]
+                actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers, eval=True).to(self.device)
+                actor.load_state_dict(model_actor)
+
+                model_critic = th.load(folder + f"/critic_{k}.pth")
+                critic = Critic(o_size, args.h_size, args.h_layers).to(self.device)
+                critic.load_state_dict(model_critic)
+
+                agents[k] = Agent(actor, critic, args.actor_lr, args.critic_lr)
+            return agents
