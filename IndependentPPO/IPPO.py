@@ -299,9 +299,6 @@ class IPPO:
         else:
             self.agents = set_agents
 
-        for k, ag in self.agents.items():
-            print(f"Agent {k} " + ("is Frozen" if ag.isFrozen() else "is not Frozen"))
-            print(f"Value of pi_t_{k} : {ag.getId()}")
         # Reset run metrics:
         self.run_metrics = {
             'global_step': 0,
@@ -351,10 +348,6 @@ class IPPO:
 
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
-
-        for k, ag in self.agents.items():
-            print(f"Agent {k} " + ("is Frozen" if ag.isFrozen() else "is not Frozen"))
-            print(f"Value of pi_t+1_{k} : {ag.getId()}")
 
         self._finish_training()
 
