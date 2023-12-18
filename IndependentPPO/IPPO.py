@@ -461,4 +461,4 @@ class IPPO:
                 critic.load_state_dict(model_critic)
 
                 agents[k] = Agent(actor, critic, args.actor_lr, args.critic_lr)
-            return agents
+            self.agents = agents
