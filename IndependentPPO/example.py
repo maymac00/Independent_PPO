@@ -19,7 +19,7 @@ args = {
     "verbose": False,
     "tb_log": True,
     "tag": "tiny",
-    "env": "MultiAgentEthicalGathering-v1",
+    "env_name": "MultiAgentEthicalGathering-v1",
     "seed": 1,
     "max_steps": 500,
     "n_agents": 2,
@@ -63,8 +63,8 @@ ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
 })
 ppo.addCallbacks(PrintAverageReward(ppo, 30))
 ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.5, args["concavity_entropy"]))
-ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
-ppo.addCallbacks(SaveCheckpoint(ppo, 1))
+# ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
+# ppo.addCallbacks(SaveCheckpoint(ppo, 100))
 
 import time
 t0 = time.time()

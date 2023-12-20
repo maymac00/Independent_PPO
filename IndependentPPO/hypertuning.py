@@ -2,12 +2,44 @@ import logging
 import sys
 import warnings
 
+import numpy as np
 import optuna
 import abc
 
 
+class DecreasingCandidatesTPESampler(optuna.samplers.TPESampler):
+    """
+    A TPE sampler that decreases the number of candidates for the expected improvement calculation over time. With
+    fewer candidates, there's a higher chance that the selected hyperparameters will be close to the ones that have
+    already performed well. This is because fewer samples mean less chance of capturing outliers or less common
+    values from the distributions. The process leans more towards exploitation, focusing on refining and exploiting
+    the known good regions of the hyperparameter space.
+    """
+    def __init__(self, initial_n_ei_candidates=24, **kwargs):
+        super().__init__(**kwargs)
+        self.initial_n_ei_candidates = initial_n_ei_candidates
+        self.n_ei_candidates = initial_n_ei_candidates
+        self.trial_count = 0
+
+    def sample_relative(self, study, trial, search_space):
+        # Increase the number of candidates by 1 for each trial
+        self.trial_count += 1
+        self.n_ei_candidates = max(self.initial_n_ei_candidates - self.trial_count, 1)
+
+        # Temporarily set the sampler's n_ei_candidates to the updated value
+        original_n_ei_candidates = self._n_ei_candidates
+        self._n_ei_candidates = self.n_ei_candidates
+
+        try:
+            # Sample the next set of parameters
+            return super().sample_relative(study, trial, search_space)
+        finally:
+            # Restore the original n_ei_candidates value
+            self._n_ei_candidates = original_n_ei_candidates
+
+
 class OptunaOptimizer(abc.ABC):
-    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None):
+    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None, sampler=None, **kwargs):
         self.study_name = study_name
         self.save = save
         self.n_trials = n_trials
@@ -17,6 +49,9 @@ class OptunaOptimizer(abc.ABC):
         if pruner is None:
             self.pruner = optuna.pruners.NopPruner()
         self.pruner = pruner
+        if sampler is None:
+            self.sampler = optuna.samplers.TPESampler()
+        self.sampler = sampler
         # optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
 
         if self.study_name is None:
@@ -29,7 +64,7 @@ class OptunaOptimizer(abc.ABC):
         self.save += f"/{self.study_name}"
         try:
             # Try to load the existing study.
-            self.study = optuna.load_study(study_name=self.study_name, storage=self.storage, pruner=pruner)
+            self.study = optuna.load_study(study_name=self.study_name, storage=self.storage, pruner=pruner, sampler=sampler, **kwargs)
             print(f"Loaded existing study '{study_name}' with {len(self.study.trials)} trials.")
         except:
             # If the study does not exist, create a new one.
@@ -42,7 +77,7 @@ class OptunaOptimizer(abc.ABC):
             f.close()
             if isinstance(direction, str):
                 self.study = optuna.create_study(direction=self.direction, study_name=self.study_name,
-                                                 storage=self.storage, pruner=pruner)
+                                                 storage=self.storage, pruner=pruner, sampler=sampler, **kwargs)
                 print(f"Created new study '{self.study_name}'.")
 
     @abc.abstractmethod
@@ -73,6 +108,10 @@ class OptunaOptimizer(abc.ABC):
                 self.study.tell(trial, state=optuna.trial.TrialState.FAIL)
                 print(f"Trial {i} failed with exception {e}.")
                 continue
+
+            # Check that value is scalar
+            if isinstance(value, list) or isinstance(value, tuple) or isinstance(value, np.ndarray):
+                raise ValueError(f"Objective function returned a list or tuple instead of a scalar value: {value}")
 
             self.study.tell(trial, value)
             print(
@@ -116,7 +155,8 @@ class OptunaOptimizeMultiObjective(abc.ABC):
             f = open(f"{self.save}/database.db", "w+")
             # close file
             f.close()
-            self.study = optuna.create_study(directions=self.direction, study_name=self.study_name, storage=self.storage)
+            self.study = optuna.create_study(directions=self.direction, study_name=self.study_name,
+                                             storage=self.storage)
             print(f"Created new study '{self.study_name}'.")
 
     @abc.abstractmethod

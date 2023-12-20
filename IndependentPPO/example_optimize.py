@@ -13,15 +13,15 @@ import matplotlib
 
 
 class OptimizerExample(OptunaOptimizer):
-    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None):
-        super().__init__(direction, study_name, save, n_trials, pruner)
+    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None, **kwargs):
+        super().__init__(direction, study_name, save, n_trials, pruner, **kwargs)
 
     def objective(self, trial):
         args = {
             "verbose": False,
             "tb_log": True,
             "tag": "tiny",
-            "env": "MultiAgentEthicalGathering-v1",
+            "env_name": "MultiAgentEthicalGathering-v1",
             "seed": 1,
             "max_steps": 500,
             "n_agents": 2,
@@ -67,7 +67,7 @@ class OptimizerExample(OptunaOptimizer):
         ppo.addCallbacks([
             PrintAverageReward(ppo, n=150),
             # TensorBoardLogging(ppo, log_dir="jro/EGG_DATA"),
-            Report2Optuna(ppo, trial,1),
+            # Report2Optuna(ppo, trial, 1),
             AnnealEntropy(ppo),
         ])
 
@@ -78,7 +78,7 @@ class OptimizerExample(OptunaOptimizer):
             rec = ppo.rollout()
             metric += sum(rec) / rec.shape[0]
         metric /= 1
-        return metric
+        return metric.mean()
 
     def pre_trial_callback(self):
         print("Pre trial callback")
@@ -91,6 +91,6 @@ class OptimizerExample(OptunaOptimizer):
 
 
 if __name__ == "__main__":
-    optimizer = OptimizerExample(["maximize", "maximize"], n_trials=50, save="example_data/optuna", study_name="test",
-                                 pruner=optuna.pruners.MedianPruner())
+    optimizer = OptimizerExample("maximize", n_trials=1, save="example_data/optuna", study_name="test",
+                                 pruner=optuna.pruners.NopPruner(), sampler=optuna.samplers.TPESampler(n_startup_trials=0))
     optimizer.optimize()
