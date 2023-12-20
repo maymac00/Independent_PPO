@@ -64,7 +64,7 @@ def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True)
 
 
 class SoftmaxActor(nn.Module):
-    action_selection = no_filter
+    action_selection = bottom_filter
 
     def __init__(self, o_size: int, a_size: int, h_size: int, h_layers: int, eval=False):
         super().__init__()
