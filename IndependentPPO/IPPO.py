@@ -396,6 +396,7 @@ class IPPO:
                         return False
                     except FileNotFoundError as e:
                         tries += 1
+                        time.sleep(1)
             return False
 
         num = 1
@@ -410,6 +411,15 @@ class IPPO:
             folder = folder + "_ckpt"
 
         if not os.path.exists(folder):
+            # Try-catch for concurrency issues
+            tries = 0
+            while tries < 5:
+                try:
+                    os.makedirs(folder)
+                    break
+                except FileExistsError as e:
+                    tries += 1
+                    time.sleep(1)
             os.makedirs(folder)
 
         print(f"Saving model in {folder}")
