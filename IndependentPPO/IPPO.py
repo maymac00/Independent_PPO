@@ -420,7 +420,6 @@ class IPPO:
                 except FileExistsError as e:
                     tries += 1
                     time.sleep(1)
-            os.makedirs(folder)
 
         print(f"Saving model in {folder}")
         self.folder = folder
