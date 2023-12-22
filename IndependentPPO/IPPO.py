@@ -391,11 +391,16 @@ class IPPO:
         # Check if folder's config file is the same as the current config
         def diff_config(path):
             if os.path.exists(path):
-                with open(path + "/config.json", "r") as f:
-                    old_config = json.load(f)
-                if old_config != vars(config):
-                    return True
-                return False
+                tries = 0
+                while tries < 5:
+                    try:
+                        with open(path + "/config.json", "r") as f:
+                            old_config = json.load(f)
+                        if old_config != vars(config):
+                            return True
+                        return False
+                    except FileNotFoundError as e:
+                        tries += 1
             return False
 
         num = 1
