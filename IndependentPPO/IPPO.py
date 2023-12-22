@@ -6,16 +6,11 @@ import time
 import warnings
 
 from collections import deque
-
-from torch import optim
-
 from IndependentPPO.agent import SoftmaxActor, Critic, Agent
 
-from IndependentPPO.utils.memory import Buffer, merge_buffers
+from IndependentPPO.utils.memory import Buffer
 from IndependentPPO.utils.misc import *
 import torch.nn as nn
-from torch.multiprocessing import Manager
-import torch.multiprocessing as mp
 import IndependentPPO
 from IndependentPPO.callbacks import UpdateCallback, Callback
 

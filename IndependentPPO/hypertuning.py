@@ -39,7 +39,7 @@ class DecreasingCandidatesTPESampler(optuna.samplers.TPESampler):
 
 
 class OptunaOptimizer(abc.ABC):
-    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None, sampler=None, **kwargs):
+    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None, sampler=None, storage=None, **kwargs):
         self.study_name = study_name
         self.save = save
         self.n_trials = n_trials
@@ -52,15 +52,15 @@ class OptunaOptimizer(abc.ABC):
         if sampler is None:
             self.sampler = optuna.samplers.TPESampler()
         self.sampler = sampler
-        # optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
 
         if self.study_name is None:
             self.study_name = "study_noname"
         if self.save is None:
             self.save = self.study_name
+        if storage is None:
             self.storage = f'sqlite:///{self.save}/database.db'
         else:
-            self.storage = f'sqlite:///{self.save}/{self.study_name}/database.db'
+            self.storage = storage
         self.save += f"/{self.study_name}"
         try:
             # Try to load the existing study.
