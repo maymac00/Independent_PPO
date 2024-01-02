@@ -86,6 +86,7 @@ class TensorBoardLogging(UpdateCallback):
         pass
 
     def after_update(self):
+        # TODO: Add a way to log the parameters of the agents individually
         # Log metrics from run metrics (avg reward), update metrics, and ppo parameters (e.g. entropy, lr)
         self.writer.add_scalar("Training/Avg Reward", np.array(self.ppo.run_metrics["avg_reward"]).mean(),
                                self.ppo.run_metrics["global_step"])

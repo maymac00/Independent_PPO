@@ -141,6 +141,8 @@ class IPPO:
 
         with th.no_grad():
             for k in self.r_agents:
+                if self.agents[k].isFrozen():
+                    continue
                 value_ = self.agents[k].critic(self.environment_reset()[k])
                 self.buffer[k].compute_mc(value_.reshape(-1))
 
