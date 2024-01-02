@@ -75,7 +75,7 @@ class SaveCheckpoint(UpdateCallback):
 class TensorBoardLogging(UpdateCallback):
     def __init__(self, ppo, log_dir):
         super().__init__(ppo)
-        self.writer = SummaryWriter(log_dir + f"/log/{self.ppo.init_args.tag}/{self.ppo.run_name}")
+        self.writer = SummaryWriter(log_dir=log_dir)
         self.writer.add_text(
             "hyperparameters",
             "|param|value|\n|-|-|\n%s" % (
