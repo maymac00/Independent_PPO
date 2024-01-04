@@ -5,6 +5,7 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from abc import ABC, abstractmethod
 import sqlite3
+import torch as th
 
 
 class Callback(ABC):
@@ -89,6 +90,7 @@ class TensorBoardLogging(UpdateCallback):
     def after_update(self):
         # TODO: Add a way to log the parameters of the agents individually
         if self.ppo.run_metrics["ep_count"] % self.freq == 0:
+            th.set_num_threads(2)
             # Log metrics from run metrics (avg reward), update metrics, and ppo parameters (e.g. entropy, lr)
             self.writer.add_scalar("Training/Avg Reward", np.array(self.ppo.run_metrics["avg_reward"]).mean(),
                                    self.ppo.run_metrics["global_step"])
