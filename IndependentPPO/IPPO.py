@@ -99,6 +99,7 @@ class IPPO:
 
         # Behaviours
         self.lr_scheduler = None
+        self.private_callbacks = []
 
         #   Torch init
         self.device = set_torch(self.n_cpus, self.cuda)
@@ -134,6 +135,10 @@ class IPPO:
 
         # Run callbacks
         for c in IPPO.callbacks:
+            if issubclass(type(c), UpdateCallback):
+                c.before_update()
+
+        for c in self.private_callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.before_update()
 
@@ -216,6 +221,10 @@ class IPPO:
 
         # Run callbacks
         for c in IPPO.callbacks:
+            if issubclass(type(c), UpdateCallback):
+                c.after_update()
+
+        for c in self.private_callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.after_update()
 
@@ -439,20 +448,35 @@ class IPPO:
             json.dump(vars(config), f, indent=4)
         return folder
 
-    def addCallbacks(self, callbacks):
-        if isinstance(callbacks, list):
-            for c in callbacks:
-                if not issubclass(type(c), Callback):
-                    raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
-                c.ppo = self
-                c.initiate()
-            IPPO.callbacks = callbacks
-        elif isinstance(callbacks, Callback):
-            callbacks.ppo = self
-            callbacks.initiate()
-            IPPO.callbacks.append(callbacks)
+    def addCallbacks(self, callbacks, private=False):
+        if private:
+            if isinstance(callbacks, list):
+                for c in callbacks:
+                    if not issubclass(type(c), Callback):
+                        raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
+                    c.ppo = self
+                    c.initiate()
+                self.private_callbacks = callbacks
+            elif isinstance(callbacks, Callback):
+                callbacks.ppo = self
+                callbacks.initiate()
+                self.private_callbacks.append(callbacks)
+            else:
+                raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
         else:
-            raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
+                if isinstance(callbacks, list):
+                    for c in callbacks:
+                        if not issubclass(type(c), Callback):
+                            raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
+                        c.ppo = self
+                        c.initiate()
+                    IPPO.callbacks = callbacks
+                elif isinstance(callbacks, Callback):
+                    callbacks.ppo = self
+                    callbacks.initiate()
+                    IPPO.callbacks.append(callbacks)
+                else:
+                    raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
 
     def load_checkpoint(self, folder):
         # Load the args from the folder
