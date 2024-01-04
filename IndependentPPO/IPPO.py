@@ -180,7 +180,7 @@ class IPPO:
                 actor_loss = th.min(actor_loss, actor_clip_loss).mean()
                 update_metrics[f"Agent_{k}/Actor Loss"] = actor_loss.detach()
 
-                actor_loss = -actor_loss - self.ent_coef * entropy_loss
+                actor_loss = -actor_loss - self.entropy_value * entropy_loss
                 update_metrics[f"Agent_{k}/Actor Loss with Entropy"] = actor_loss.detach()
 
                 self.agents[k].a_optimizer.zero_grad(True)
