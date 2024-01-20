@@ -1,3 +1,4 @@
+import threading
 import time
 from abc import abstractmethod
 
@@ -83,35 +84,37 @@ class TensorBoardLogging(UpdateCallback):
             "|param|value|\n|-|-|\n%s" % (
                 "\n".join([f"|{key}|{value}|" for key, value in vars(self.ppo.init_args).items()])),
         )
+        self.semaphore = threading.Semaphore(1)
 
     def before_update(self):
         pass
 
     def after_update(self):
         # TODO: Add a way to log the parameters of the agents individually
-        if self.ppo.run_metrics["ep_count"] % self.freq == 0:
-            th.set_num_threads(2)
-            # Log metrics from run metrics (avg reward), update metrics, and ppo parameters (e.g. entropy, lr)
-            self.writer.add_scalar("Training/Avg Reward", np.array(self.ppo.run_metrics["avg_reward"]).mean(),
-                                   self.ppo.run_metrics["global_step"])
-            self.writer.add_scalar("Training/Entropy coef", self.ppo.entropy_value, self.ppo.run_metrics["global_step"])
-            self.writer.add_scalar("Training/Actor LR", self.ppo.actor_lr, self.ppo.run_metrics["global_step"])
-            self.writer.add_scalar("Training/Critic LR", self.ppo.critic_lr, self.ppo.run_metrics["global_step"])
-            self.writer.add_scalar("Training/SPS",
-                                   self.ppo.n_steps / (time.time() - self.ppo.run_metrics["sim_start_time"]),
-                                   self.ppo.run_metrics["global_step"])
-            self.writer.add_scalar("Training/Mean loss across agents",
-                                   np.array(self.ppo.run_metrics["mean_loss"]).mean(),
-                                   self.ppo.run_metrics["global_step"])
+        with self.semaphore:
+            if self.ppo.run_metrics["ep_count"] % self.freq == 0:
+                th.set_num_threads(1)
+                # Log metrics from run metrics (avg reward), update metrics, and ppo parameters (e.g. entropy, lr)
+                self.writer.add_scalar("Training/Avg Reward", np.array(self.ppo.run_metrics["avg_reward"]).mean(),
+                                       self.ppo.run_metrics["global_step"])
+                self.writer.add_scalar("Training/Entropy coef", self.ppo.entropy_value, self.ppo.run_metrics["global_step"])
+                self.writer.add_scalar("Training/Actor LR", self.ppo.actor_lr, self.ppo.run_metrics["global_step"])
+                self.writer.add_scalar("Training/Critic LR", self.ppo.critic_lr, self.ppo.run_metrics["global_step"])
+                self.writer.add_scalar("Training/SPS",
+                                       self.ppo.n_steps / (time.time() - self.ppo.run_metrics["sim_start_time"]),
+                                       self.ppo.run_metrics["global_step"])
+                self.writer.add_scalar("Training/Mean loss across agents",
+                                       np.array(self.ppo.run_metrics["mean_loss"]).mean(),
+                                       self.ppo.run_metrics["global_step"])
 
-            for k, v in self.ppo.run_metrics["agent_performance"].items():
-                self.writer.add_scalar(k, v, self.ppo.run_metrics["global_step"])
+                for k, v in self.ppo.run_metrics["agent_performance"].items():
+                    self.writer.add_scalar(k, v, self.ppo.run_metrics["global_step"])
 
-            for key, value in self.ppo.update_metrics.items():
-                if isinstance(value, list):
-                    self.writer.add_scalar(key, np.array(value).mean(), self.ppo.run_metrics["global_step"])
-                else:
-                    self.writer.add_scalar(key, value, self.ppo.run_metrics["global_step"])
+                for key, value in self.ppo.update_metrics.items():
+                    if isinstance(value, list):
+                        self.writer.add_scalar(key, np.array(value).mean(), self.ppo.run_metrics["global_step"])
+                    else:
+                        self.writer.add_scalar(key, value, self.ppo.run_metrics["global_step"])
 
 
 class Report2Optuna(UpdateCallback):
