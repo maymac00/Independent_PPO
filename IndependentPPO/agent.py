@@ -40,6 +40,9 @@ class Agent:
     def predict(self, x):
         return self.actor.predict(x)
 
+    def __str__(self):
+        return str(self.getId())
+
 
 def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True):
     """
