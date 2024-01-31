@@ -76,7 +76,9 @@ def parse_ppo_args():
                         help="Toggles for `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=str2bool, default=False, help="Toggles cuda")  # check .to(device) for GPUs
 
-    args = parser.parse_known_args()[0]
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        print(f"Ignoring unknown arguments: {unknown}")
     # args.batch_size = int(args.n_envs * args.n_steps)     # if you plan to use parallel envs
     args.batch_size = int(1 * args.n_steps)  # otherwise
 
@@ -155,13 +157,17 @@ def args_from_json(directory):
                         help="Toggles for `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=str2bool, help="Toggles cuda")  # check .to(device) for GPUs
 
-    cmd_args = parser.parse_args()
+    cmd_args, unknown = parser.parse_known_args()
 
     # compare namespace objects and get cmd_args over json_args
     args = vars(json_args)
     for key, value in vars(cmd_args).items():
         if value is not None:
             args[key] = value
+
+    # Unkown arguments
+    if unknown:
+        print(f"Ignoring unknown arguments: {unknown}")
     args = argparse.Namespace(**args)
     args.batch_size = int(1 * args.n_steps)
     return args
