@@ -77,8 +77,19 @@ def parse_ppo_args():
     parser.add_argument("--cuda", type=str2bool, default=False, help="Toggles cuda")  # check .to(device) for GPUs
 
     args, unknown = parser.parse_known_args()
+    # Unkown arguments
     if unknown:
-        print(f"Ignoring unknown arguments: {unknown}")
+        print(f"Unknown arguments: {unknown}")
+
+    # Add unknown arguments to the args namespace
+    for arg in unknown:
+        # Split the argument on '=' sign if it's in key=value format
+        if '=' in arg:
+            key, value = arg.split('=', 1)
+            setattr(args, key.lstrip('-'), value)
+        else:
+            # For flag-like unknown arguments
+            setattr(args, arg.lstrip('-'), True)
     # args.batch_size = int(args.n_envs * args.n_steps)     # if you plan to use parallel envs
     args.batch_size = int(1 * args.n_steps)  # otherwise
 
@@ -167,7 +178,18 @@ def args_from_json(directory):
 
     # Unkown arguments
     if unknown:
-        print(f"Ignoring unknown arguments: {unknown}")
+        print(f"Unknown arguments: {unknown}")
+
+    # Add unknown arguments to the args namespace
+    for arg in unknown:
+        # Split the argument on '=' sign if it's in key=value format
+        if '=' in arg:
+            key, value = arg.split('=', 1)
+            setattr(args, key.lstrip('-'), value)
+        else:
+            # For flag-like unknown arguments
+            setattr(args, arg.lstrip('-'), True)
+
     args = argparse.Namespace(**args)
     args.batch_size = int(1 * args.n_steps)
     return args
