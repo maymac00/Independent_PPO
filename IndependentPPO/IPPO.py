@@ -249,6 +249,8 @@ class IPPO:
                         logprob[k],
                         _,
                     ) = self.agents[k].actor.get_action(observation[k])
+
+                    s_value[k] = self.agents[k].critic(observation[k])
             # TODO: Change action -> env_action mapping
             non_tensor_observation, reward, done, info = self.env.step(env_action)
             ep_reward += reward
