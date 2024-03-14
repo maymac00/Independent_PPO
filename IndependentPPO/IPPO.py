@@ -34,7 +34,7 @@ class IPPO:
     callbacks: List[Callback] = []
 
     @staticmethod
-    def actors_from_file(folder, dev='cpu'):
+    def actors_from_file(folder, dev='cpu', eval=True):
         """
         Creates the agents from the folder's model, and returns them set to eval mode.
         It is assumed that the model is a SoftmaxActor from file agent.py which only has hidden layers and an output layer.
@@ -49,9 +49,36 @@ class IPPO:
                 model = th.load(folder + f"/actor_{k}.pth")
                 o_size = model["hidden.0.weight"].shape[1]
                 a_size = model["output.weight"].shape[0]
-                actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers, eval=True).to(dev)
+                actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers, eval=eval).to(dev)
                 actor.load_state_dict(model)
-                agents.append(actor)
+                critic = Critic(o_size, args.h_size, args.h_layers).to(dev)
+                critic.load_state_dict(th.load(folder + f"/critic_{k}.pth"))
+
+                agents.append(Agent(actor, critic, args.actor_lr, args.critic_lr))
+            return agents
+
+    @staticmethod
+    def agents_from_file(folder, dev='cpu', eval=True):
+        """
+        Creates the agents from the folder's model, and returns them set to eval mode.
+        It is assumed that the model is a SoftmaxActor from file agent.py which only has hidden layers and an output layer.
+        :return:
+        """
+        # Load the args from the folder
+        with open(folder + "/config.json", "r") as f:
+            args = argparse.Namespace(**json.load(f))
+            # Load the model
+            agents = []
+            for k in range(args.n_agents):
+                model = th.load(folder + f"/actor_{k}.pth")
+                o_size = model["hidden.0.weight"].shape[1]
+                a_size = model["output.weight"].shape[0]
+                actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers,  eval=eval).to(dev)
+                actor.load_state_dict(model)
+                critic = Critic(o_size, args.h_size, args.h_layers).to(dev)
+                critic.load_state_dict(th.load(folder + f"/critic_{k}.pth"))
+
+                agents.append(Agent(actor, critic, args.actor_lr, args.critic_lr))
             return agents
 
     def __init__(self, args, env, run_name=None):

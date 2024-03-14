@@ -68,11 +68,11 @@ ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.5, args["concavity_entropy"]))
 
 import time
 t0 = time.time()
-ppo.train()
+# ppo.train()
 t = time.time() - t0
 print(f"Steps per second: {ppo.tot_steps / t}")
 
-agents = IPPO.agents_from_file("IndependentPPO/example_data/example/2500_30000_1_ckpt")
+agents = IPPO.agents_from_file("example_data/tiny/2500_30000_1_(1)")
 
 # Run a simulation of the trained agents
 obs, info = env.reset()
@@ -80,4 +80,5 @@ done = False
 while not done:
     actions = [agent.predict(obs[i]) for i, agent in enumerate(agents)]
     obs, rewards, done, info = env.step(actions)
+    done = all(done)
     env.render()

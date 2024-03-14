@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import warnings
 
@@ -15,6 +16,7 @@ class DecreasingCandidatesTPESampler(optuna.samplers.TPESampler):
     values from the distributions. The process leans more towards exploitation, focusing on refining and exploiting
     the known good regions of the hyperparameter space.
     """
+
     def __init__(self, initial_n_ei_candidates=24, **kwargs):
         super().__init__(**kwargs)
         self.initial_n_ei_candidates = initial_n_ei_candidates
@@ -39,7 +41,8 @@ class DecreasingCandidatesTPESampler(optuna.samplers.TPESampler):
 
 
 class OptunaOptimizer(abc.ABC):
-    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None, sampler=None, storage=None, **kwargs):
+    def __init__(self, direction, study_name=None, save=None, n_trials=1, pruner=None, sampler=None, storage=None,
+                 **kwargs):
         self.study_name = study_name
         self.save = save
         self.n_trials = n_trials
@@ -57,28 +60,15 @@ class OptunaOptimizer(abc.ABC):
             self.study_name = "study_noname"
         if self.save is None:
             self.save = self.study_name
+        self.save += f"/{self.study_name}"
         if storage is None:
             self.storage = f'sqlite:///{self.save}/database.db'
         else:
             self.storage = storage
-        self.save += f"/{self.study_name}"
-        try:
-            # Try to load the existing study.
-            self.study = optuna.load_study(study_name=self.study_name, storage=self.storage, pruner=pruner, sampler=sampler, **kwargs)
-            print(f"Loaded existing study '{study_name}' with {len(self.study.trials)} trials.")
-        except:
-            # If the study does not exist, create a new one.
-            import os
 
-            os.makedirs(self.save, exist_ok=True)
-            # Create file
-            f = open(f"{self.save}/database.db", "w+")
-            # close file
-            f.close()
-            if isinstance(direction, str):
-                self.study = optuna.create_study(direction=self.direction, study_name=self.study_name,
-                                                 storage=self.storage, pruner=pruner, sampler=sampler, **kwargs)
-                print(f"Created new study '{self.study_name}'.")
+        os.makedirs(f"{self.save}", exist_ok=True)
+        self.study = optuna.create_study(direction=self.direction, study_name=self.study_name, load_if_exists=True,
+                                         storage=self.storage, pruner=pruner, sampler=sampler, **kwargs)
 
     @abc.abstractmethod
     def objective(self, trial):
