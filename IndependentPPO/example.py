@@ -5,7 +5,7 @@ pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
 from EthicalGatheringGame.presets import tiny
 from EthicalGatheringGame.wrappers import NormalizeReward
 from IPPO import IPPO
-from LagrIPPO import LagrIPPO
+from CIPPO import CIPPO
 from callbacks import AnnealEntropy, PrintAverageReward
 from lr_schedules import  IndependentPPOAnnealing
 import gym
@@ -56,7 +56,7 @@ args = {
     "clip_vloss": True,
 }
 
-ppo = LagrIPPO(args, env=env)
+ppo = CIPPO(args, env=env)
 
 ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
     0: {"actor_lr": 0.0003, "critic_lr": 0.004},

@@ -31,7 +31,7 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
         return {k: th.as_tensor(d, dtype=astype).to(device) for k, d in zip(agents, data)}
 
 
-class LagrIPPO:
+class CIPPO:
     callbacks: List[Callback] = []
 
     @staticmethod
@@ -188,7 +188,7 @@ class LagrIPPO:
 
     def update(self):
         # Run callbacks
-        for c in LagrIPPO.callbacks:
+        for c in CIPPO.callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.before_update()
 
@@ -345,7 +345,7 @@ class LagrIPPO:
         self.run_metrics["mean_loss"].append(mean_loss)
 
         # Run callbacks
-        for c in LagrIPPO.callbacks:
+        for c in CIPPO.callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.after_update()
 
@@ -624,11 +624,11 @@ class LagrIPPO:
                         raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
                     c.ppo = self
                     c.initiate()
-                LagrIPPO.callbacks = callbacks
+                CIPPO.callbacks = callbacks
             elif isinstance(callbacks, Callback):
                 callbacks.ppo = self
                 callbacks.initiate()
-                LagrIPPO.callbacks.append(callbacks)
+                CIPPO.callbacks.append(callbacks)
             else:
                 raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
 
