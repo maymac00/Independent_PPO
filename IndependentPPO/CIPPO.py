@@ -1,10 +1,7 @@
-import argparse
 import copy
 import json
 import logging
 import time
-import warnings
-
 from collections import deque
 
 import IndependentPPO.config as config
@@ -14,6 +11,14 @@ from IndependentPPO.utils.memory import LagrBuffer
 from IndependentPPO.utils.misc import *
 import torch.nn as nn
 from IndependentPPO.callbacks import UpdateCallback, Callback
+
+from IndependentPPO.IPPO import _array_to_dict_tensor
+import torch as th
+import warnings
+import numpy as np
+import multiprocessing as mp
+from multiprocessing import Manager
+from IndependentPPO.utils.memory import merge_buffers, Buffer
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -220,14 +225,14 @@ class CIPPO:
             update_metrics[f"Agent_{k}/Cost 1 Mean Ep"] = self.sim_metrics['mean_episode_cost_1'][k]
             update_metrics[f"Agent_{k}/Cost 2 Mean Ep"] = self.sim_metrics['mean_episode_cost_2'][k]
             lag_loss = -self.agents[k].lag_mul_1 * (
-                        th.mean(th.tensor(self.sim_metrics['mean_episode_cost_1'][k], dtype=th.float32)) - self.agents[
-                    k].constr_limit_1)
+                    th.mean(th.tensor(self.sim_metrics['mean_episode_cost_1'][k], dtype=th.float32)) - self.agents[
+                k].constr_limit_1)
             self.agents[k].lag_optimizer_1.zero_grad(True)
             lag_loss.backward()
             self.agents[k].lag_optimizer_1.step()
             lag_loss = -self.agents[k].lag_mul_2 * (
-                        th.mean(th.tensor(self.sim_metrics['mean_episode_cost_2'][k], dtype=th.float32)) - self.agents[
-                    k].constr_limit_2)
+                    th.mean(th.tensor(self.sim_metrics['mean_episode_cost_2'][k], dtype=th.float32)) - self.agents[
+                k].constr_limit_2)
             self.agents[k].lag_optimizer_2.zero_grad(True)
             lag_loss.backward()
             self.agents[k].lag_optimizer_2.step()
@@ -401,8 +406,8 @@ class CIPPO:
                         action[k],
                         logprob[k],
                         reward[k],
-                        ep_cost_1[k][-1],
-                        ep_cost_2[k][-1],
+                        ep_cost_1[k][step],
+                        ep_cost_2[k][step],
                         s_value[k],
                         c_value_1[k],
                         c_value_2[k],
@@ -661,3 +666,134 @@ class CIPPO:
                                       args.constr_limit_1, args.constr_limit_2, args.mult_lr, args.mult_init)
 
             self.agents = agents
+
+
+class ParallelCIPPO(CIPPO):
+    def __init__(self, args, env, run_name=None):
+        super().__init__(args, env, run_name)
+        self.logger.info("Parallelizing environments")
+        self.parallelize = True
+        main_process_threads = th.get_num_threads()
+        if self.n_envs > main_process_threads:
+            raise Exception(
+                "Number of parallelized environments is greater than the number of available threads. Try with less environments or add more threads.")
+        thld = main_process_threads - self.n_envs  # Number of threads to be used by the main process
+        th.set_num_threads(thld)  # Set the number of threads to be used by the main process
+        if self.n_envs < (self.n_steps / self.max_steps):
+            warnings.warn(
+                "Efficency is maximized when the number of parallelized environments is equal to n_steps/max_steps.")
+
+    def rollout(self):
+        with Manager() as manager:
+            d = manager.dict()
+            batch_size = int(self.n_steps / self.max_steps)
+
+            solved = 0
+            while solved < batch_size:
+                runs = min(self.n_envs, batch_size - solved)
+                # print("Running ", runs, " tasks")
+                tasks = [(self.env, d, global_id) for global_id in range(solved, solved + runs)]
+                with mp.Pool(runs) as p:
+                    p.map(self._parallel_rollout, tasks[:runs])
+                # Remove solved tasks
+                solved += runs
+
+            # Fetch the logs
+            self.sim_metrics = self._parallel_results(d, batch_size)
+
+            # We set the global env state of the environment to the first parallelized environment
+            self.env.__dict__.update(d[0]["env_state"])
+            # Merge the results
+            for k in self.r_agents:
+                self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)], lagr=True)
+        self.run_metrics['ep_count'] += solved
+        self.run_metrics['global_step'] += solved * self.max_steps
+        self.run_metrics['avg_reward'].append(self.sim_metrics["reward_per_agent"].mean())
+        # Save mean reward per agent
+        for k in self.r_agents:
+            self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = self.sim_metrics["reward_per_agent"][k]
+
+        return np.array(
+            [self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
+
+    def _parallel_rollout(self, tasks):
+        env, result, env_id = tasks
+        th.set_num_threads(1)
+        data = {"global_step": self.run_metrics["global_step"], "reward_per_agent": None}
+
+        single_buffer = {k: LagrBuffer(self.o_size, self.max_steps, self.max_steps, self.gamma,
+                                       self.gae_lambda, self.device) for k in self.r_agents}
+
+        data["global_step"] += env_id * self.max_steps
+
+        observation = self.environment_reset(env=env)
+
+        action, logprob, s_value, c_value_1, c_value_2 = [{k: 0 for k in self.r_agents} for _ in range(5)]
+        env_action, ep_reward = [np.zeros(self.n_agents) for _ in range(2)]
+        ep_cost_1, ep_cost_2 = [{k: np.zeros(self.n_steps) for k in self.r_agents} for _ in range(2)]
+
+        for step in range(self.max_steps):
+            data["global_step"] += 1
+
+            with th.no_grad():
+                for k in self.r_agents:
+                    (
+                        env_action[k],
+                        action[k],
+                        logprob[k],
+                        _,
+                    ) = self.agents[k].actor.get_action(observation[k])
+
+                    if not self.eval_mode:
+                        s_value[k] = self.agents[k].critic(observation[k])
+                        c_value_1[k] = self.agents[k].critic_cost_1(observation[k])
+                        c_value_2[k] = self.agents[k].critic_cost_2(observation[k])
+
+            non_tensor_observation, reward, done, info = env.step(env_action)
+
+            ep_reward += reward
+
+            reward = _array_to_dict_tensor(self.r_agents, reward, self.device)
+            done = _array_to_dict_tensor(self.r_agents, done, self.device)
+            if not self.eval_mode:
+                for k in self.r_agents:
+                    ep_cost_1[k][step] = info["R'_N"][k]
+                    ep_cost_2[k][step] = info["R'_E"][k]
+
+                    single_buffer[k].store(
+                        observation[k],
+                        action[k],
+                        logprob[k],
+                        reward[k],
+                        ep_cost_1[k][step],
+                        ep_cost_2[k][step],
+                        s_value[k],
+                        c_value_1[k],
+                        c_value_2[k],
+                        done[k]
+                    )
+
+            observation = _array_to_dict_tensor(self.r_agents, non_tensor_observation, self.device)
+
+        # End of simulation
+        data["reward_per_agent"] = ep_reward
+        data["mean_episode_cost_1"] = [ep_cost_1[k].sum() / self.max_steps for k in self.r_agents]
+        data["mean_episode_cost_2"] = [ep_cost_2[k].sum() / self.max_steps for k in self.r_agents]
+        data["single_buffer"] = single_buffer
+        data["env_state"] = self.env.__dict__.items()
+        result[env_id] = data
+
+    def _parallel_results(self, d, batch_size):
+        metrics = [{}] * batch_size
+        for i in range(batch_size):
+            metrics[i]["reward_per_agent"] = d[i]["reward_per_agent"]
+            metrics[i]["mean_episode_cost_1"] = d[i]["mean_episode_cost_1"]
+            metrics[i]["mean_episode_cost_2"] = d[i]["mean_episode_cost_2"]
+            metrics[i]["global_step"] = d[i]["global_step"]
+        # make mean of each metric
+        sim_metrics = {}
+
+        sim_metrics["reward_per_agent"] = np.array([s["reward_per_agent"] for s in metrics]).mean(axis=0)
+        sim_metrics["mean_episode_cost_1"] = np.array([s["mean_episode_cost_1"] for s in metrics]).mean(axis=0)
+        sim_metrics["mean_episode_cost_2"] = np.array([s["mean_episode_cost_2"] for s in metrics]).mean(axis=0)
+        return sim_metrics
