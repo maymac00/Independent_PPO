@@ -7,13 +7,13 @@ import warnings
 
 from collections import deque
 
-import config
-from agent import SoftmaxActor, Critic, LagrAgent
+import IndependentPPO.config as config
+from IndependentPPO.agent import SoftmaxActor, Critic, LagrAgent
 
-from utils.memory import LagrBuffer
-from utils.misc import *
+from IndependentPPO.utils.memory import LagrBuffer
+from IndependentPPO.utils.misc import *
 import torch.nn as nn
-from callbacks import UpdateCallback, Callback
+from IndependentPPO.callbacks import UpdateCallback, Callback
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
