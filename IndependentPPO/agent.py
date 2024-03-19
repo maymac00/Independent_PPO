@@ -1,3 +1,4 @@
+import torch as th
 from torch import optim
 from torch.distributions import Normal
 import torch.nn as nn
@@ -42,6 +43,35 @@ class Agent:
 
     def __str__(self):
         return str(self.getId())
+    
+class LagrAgent(Agent):
+    # A Lagrangian Agent is an agent with an additional critic for the cost value function, a lagrangian multiplier for the constraint, and its learning rate
+    def __init__(self, actor, critic, critic_cost_1, critic_cost_2, actor_lr, critic_lr, constr_limit_1, constr_limit_2, mult_lr, mult_init=0.5):
+        super().__init__(actor, critic, actor_lr, critic_lr)
+
+        # Setting up the cost value functions
+        self.critic_cost_1 = critic_cost_1
+        self.c_cost_optimizer_1 = optim.Adam(list(self.critic_cost_1.parameters()), lr=critic_lr, eps=1e-5)  
+        self.critic_cost_2 = critic_cost_2
+        self.c_cost_optimizer_2 = optim.Adam(list(self.critic_cost_2.parameters()), lr=critic_lr, eps=1e-5)  # We usually set the same lr for the critics
+
+        # Setting up the Lagrangian multipliers
+        self.lag_mul_1 = th.tensor(mult_init, requires_grad=True, device=self.device)
+        self.constr_limit_1 = constr_limit_1
+        self.lag_optimizer_1 = optim.Adam([self.lag_mul_1], lr=mult_lr)
+        self.lag_mul_2 = th.tensor(mult_init, requires_grad=True, device=self.device)
+        self.constr_limit_2 = constr_limit_2
+        self.lag_optimizer_2 = optim.Adam([self.lag_mul_2], lr=mult_lr)
+
+    def freeze(self):
+        super().freeze()
+        self.critic_cost_1.freeze()
+        self.critic_cost_2.freeze()
+
+    def unfreeze(self):
+        super().unfreeze()
+        self.critic_cost_1.unfreeze()
+        self.critic_cost_2.unfreeze()
 
 
 def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True):

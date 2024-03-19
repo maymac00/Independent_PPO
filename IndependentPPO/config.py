@@ -63,6 +63,12 @@ def parse_ppo_args():
     parser.add_argument("--anneal-entropy", type=str2bool, default=True, help="Toggles annealing entropy coefficient")
     parser.add_argument("--concavity-entropy", type=float, default=3.5, help="Sets concavity of entropy coefficient")
 
+    # Lagrangian PPO
+    parser.add_argument("--constr-lim-1", type=float, default=2, help="Sets the limit of the constraint 1")
+    parser.add_argument("--constr-lim-2", type=float, default=2, help="Sets the limit of the constraint 2")
+    parser.add_argument("--mult-lr", type=float, default=0.035, help="Sets initial value of the learning rate for the lagrangian multiplier")
+    parser.add_argument("--mult-init", type=float, default=0.5, help="Sets initial value of the lagrangian multiplier")
+
     # DNN
     parser.add_argument("--h-size", type=int, default=128, help="Layers size")
     parser.add_argument("--h-layers", type=int, default=2, help="Number of layers")
@@ -113,7 +119,7 @@ def args_from_json(directory):
         setattr(json_args, key, value)
 
     # Parse arguments
-    parser = CustomArgumentParser(description='Example')
+    parser = CustomArgumentParser()
     # Logging
     parser.add_argument("--tag", type=str, help="Training tag")
 
@@ -154,6 +160,12 @@ def args_from_json(directory):
 
     parser.add_argument("--anneal-entropy", type=str2bool, default=True, help="Toggles annealing entropy coefficient")
     parser.add_argument("--concavity-entropy", type=float, default=3.5, help="Sets concavity of entropy coefficient")
+
+    # Lagrangian PPO
+    parser.add_argument("--constr-lim-1", type=float, default=2, help="Sets the limit of the constraint 1")
+    parser.add_argument("--constr-lim-2", type=float, default=2, help="Sets the limit of the constraint 2")
+    parser.add_argument("--mult-lr", type=float, default=0.035, help="Sets initial value of the learning rate for the lagrangian multiplier")
+    parser.add_argument("--mult-init", type=float, default=0.5, help="Sets initial value of the lagrangian multiplier")
 
     # DNN
     parser.add_argument("--h-size", type=int, help="Layers size")

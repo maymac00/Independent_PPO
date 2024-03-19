@@ -6,13 +6,14 @@ import time
 import warnings
 
 from collections import deque
-from IndependentPPO.agent import SoftmaxActor, Critic, Agent
 
-from IndependentPPO.utils.memory import Buffer
-from IndependentPPO.utils.misc import *
+import config
+from agent import SoftmaxActor, Critic, LagrAgent
+
+from utils.memory import LagrBuffer
+from utils.misc import *
 import torch.nn as nn
-import IndependentPPO
-from IndependentPPO.callbacks import UpdateCallback, Callback
+from callbacks import UpdateCallback, Callback
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -30,13 +31,13 @@ def _array_to_dict_tensor(agents: List[int], data: Array, device: th.device, ast
         return {k: th.as_tensor(d, dtype=astype).to(device) for k, d in zip(agents, data)}
 
 
-class IPPO:
+class LagrIPPO:
     callbacks: List[Callback] = []
 
     @staticmethod
     def actors_from_file(folder, dev='cpu', eval=True):
         """
-        Creates the actors from the folder's model, and returns them set to eval mode.
+        Creates the agents from the folder's model, and returns them set to eval mode.
         It is assumed that the model is a SoftmaxActor from file agent.py which only has hidden layers and an output layer.
         :return:
         """
@@ -51,8 +52,17 @@ class IPPO:
                 a_size = model["output.weight"].shape[0]
                 actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers, eval=eval).to(dev)
                 actor.load_state_dict(model)
+                critic = Critic(o_size, args.h_size, args.h_layers).to(dev)
+                critic.load_state_dict(th.load(folder + f"/critic_{k}.pth"))
+                critic_cost_1 = Critic(o_size, args.h_size, args.h_layers).to(dev)
+                critic_cost_1.load_state_dict(th.load(folder + f"/critic_cost_1_{k}.pth"))
+                critic_cost_2 = Critic(o_size, args.h_size, args.h_layers).to(dev)
+                critic_cost_2.load_state_dict(th.load(folder + f"/critic_cost_2_{k}.pth"))
 
-                agents.append(actor)
+                agents.append(LagrAgent(actor, critic, critic_cost_1, critic_cost_1, args.actor_lr, args.critic_lr,
+                                        args.constr_limit_1, args.constr_limit_2, args.mult_lr, args.mult_init))
+                # mult_init should probably be initialized to the value at checkpoint (same for learning rates)
+
             return agents
 
     @staticmethod
@@ -71,12 +81,18 @@ class IPPO:
                 model = th.load(folder + f"/actor_{k}.pth")
                 o_size = model["hidden.0.weight"].shape[1]
                 a_size = model["output.weight"].shape[0]
-                actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers,  eval=eval).to(dev)
+                actor = SoftmaxActor(o_size, a_size, args.h_size, args.h_layers, eval=eval).to(dev)
                 actor.load_state_dict(model)
                 critic = Critic(o_size, args.h_size, args.h_layers).to(dev)
                 critic.load_state_dict(th.load(folder + f"/critic_{k}.pth"))
+                critic_cost_1 = Critic(o_size, args.h_size, args.h_layers).to(dev)
+                critic_cost_1.load_state_dict(th.load(folder + f"/critic_cost_1_{k}.pth"))
+                critic_cost_2 = Critic(o_size, args.h_size, args.h_layers).to(dev)
+                critic_cost_2.load_state_dict(th.load(folder + f"/critic_cost_2_{k}.pth"))
 
-                agents.append(Agent(actor, critic, args.actor_lr, args.critic_lr))
+                agents.append(LagrAgent(actor, critic, critic_cost_1, critic_cost_1, args.actor_lr, args.critic_lr,
+                                        args.constr_limit_1, args.constr_limit_2, args.mult_lr, args.mult_init))
+
             return agents
 
     def __init__(self, args, env, run_name=None):
@@ -97,7 +113,7 @@ class IPPO:
         elif type(args) is argparse.Namespace:
             args = args
         elif type(args) is str:
-            args = IndependentPPO.config.args_from_json(args)
+            args = config.args_from_json(args)
         self.init_args = args
 
         for k, v in self.init_args.__dict__.items():
@@ -134,17 +150,31 @@ class IPPO:
         self.buffer = None
         self.agents, self.buffer = {}, {}
 
+        # Lagr parameters: NOTE must add and take these from config.py
+        self.mult_lr = 0.035
+        self.mult_init = 0.5
+        self.constr_limit_1 = 10
+        self.constr_limit_2 = 10
+
         for k in self.r_agents:
-            self.agents[k] = Agent(
+            self.agents[k] = LagrAgent(
                 SoftmaxActor(self.o_size, self.a_size, self.h_size, self.h_layers).to(self.device),
+                Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
+                Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
                 Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
                 self.actor_lr,
                 self.critic_lr,
+                self.constr_limit_1,
+                self.constr_limit_2,
+                self.mult_lr,
+                self.mult_init,
             )
-            self.buffer[k] = Buffer(self.o_size, self.n_steps, self.max_steps, self.gamma,
-                                    self.gae_lambda, self.device)
+            self.buffer[k] = LagrBuffer(self.o_size, self.n_steps, self.max_steps, self.gamma,
+                                        self.gae_lambda, self.device)
 
         self.env = env
+        self.logger.info(f"On lagrIPPO we set ethical weight to 0.0")
+        self.env.we = [1.0, 0.0]
 
     def environment_reset(self, env=None):
         if env is None:
@@ -157,9 +187,8 @@ class IPPO:
             return observation
 
     def update(self):
-
         # Run callbacks
-        for c in IPPO.callbacks:
+        for c in LagrIPPO.callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.before_update()
 
@@ -173,8 +202,11 @@ class IPPO:
             for k in self.r_agents:
                 if self.agents[k].isFrozen():
                     continue
-                value_ = self.agents[k].critic(self.environment_reset()[k])
-                self.buffer[k].compute_mc(value_.reshape(-1))
+                observation = self.environment_reset()[k]
+                value_ = self.agents[k].critic(observation)
+                cost_value_1_ = self.agents[k].critic_cost_1(observation)
+                cost_value_2_ = self.agents[k].critic_cost_2(observation)
+                self.buffer[k].compute_mc(value_.reshape(-1), cost_value_1_.reshape(-1), cost_value_2_.reshape(-1))
 
         # Optimize the policy and value networks
         for k in self.r_agents:
@@ -182,6 +214,23 @@ class IPPO:
             if self.agents[k].isFrozen():
                 continue
             b = self.buffer[k].sample()
+
+            # Multiplier optimization
+            # NOTE Take the average episode cost from the rollout
+            update_metrics[f"Agent_{k}/Cost 1 Mean Ep"] = self.sim_metrics['mean_episode_cost_1'][k]
+            update_metrics[f"Agent_{k}/Cost 2 Mean Ep"] = self.sim_metrics['mean_episode_cost_2'][k]
+            lag_loss = -self.agents[k].lag_mul_1 * (
+                        th.mean(th.tensor(self.sim_metrics['mean_episode_cost_1'][k], dtype=th.float32)) - self.agents[
+                    k].constr_limit_1)
+            self.agents[k].lag_optimizer_1.zero_grad(True)
+            lag_loss.backward()
+            self.agents[k].lag_optimizer_1.step()
+            lag_loss = -self.agents[k].lag_mul_2 * (
+                        th.mean(th.tensor(self.sim_metrics['mean_episode_cost_2'][k], dtype=th.float32)) - self.agents[
+                    k].constr_limit_2)
+            self.agents[k].lag_optimizer_2.zero_grad(True)
+            lag_loss.backward()
+            self.agents[k].lag_optimizer_2.step()
 
             # Actor optimization
             for epoch in range(self.n_epochs):
@@ -197,6 +246,13 @@ class IPPO:
                 mb_advantages = b['advantages']
                 if self.norm_adv: mb_advantages = normalize(mb_advantages)
 
+                # Cost advantages -> NOTE: in Lagr setups people only rescale the cost advantages instead of normalizing them (although there isn't a real explanation for that)
+                mb_cost_advantages_1 = b['cost_advantages_1']
+                mb_cost_advantages_2 = b['cost_advantages_2']
+                if self.norm_adv:
+                    mb_cost_advantages_1 -= mb_cost_advantages_1.mean()
+                    mb_cost_advantages_2 -= mb_cost_advantages_2.mean()
+
                 actor_loss = mb_advantages * ratio
                 update_metrics[f"Agent_{k}/Actor Loss Non-Clipped"] = actor_loss.mean().detach()
 
@@ -205,7 +261,19 @@ class IPPO:
                 actor_loss = th.min(actor_loss, actor_clip_loss).mean()
                 update_metrics[f"Agent_{k}/Actor Loss"] = actor_loss.detach()
 
-                actor_loss = -actor_loss - self.entropy_value * entropy_loss
+                # Apply the Lagrangian penalties
+                surr_cost_adv_1 = (mb_cost_advantages_1 * ratio).mean()
+                surr_cost_adv_2 = (mb_cost_advantages_2 * ratio).mean()
+
+                penalty_1 = th.nn.functional.softplus(
+                    self.agents[k].lag_mul_1)  # Lag multiplier >= 0, but softplus works better
+                penalty_2 = th.nn.functional.softplus(
+                    self.agents[k].lag_mul_2)  # Lag multiplier >= 0, but softplus works better
+
+                lag_penalty = penalty_1 * surr_cost_adv_1 + penalty_2 * surr_cost_adv_2
+                actor_loss = -(actor_loss - lag_penalty) / (1 + penalty_1 + penalty_2)
+
+                actor_loss = actor_loss - self.entropy_value * entropy_loss
                 update_metrics[f"Agent_{k}/Actor Loss with Entropy"] = actor_loss.detach()
 
                 self.agents[k].a_optimizer.zero_grad(True)
@@ -216,6 +284,8 @@ class IPPO:
             # Critic optimization
             for epoch in range(self.n_epochs * self.critic_times):
                 values = self.agents[k].critic(b['observations']).squeeze()
+                cost_values_1 = self.agents[k].critic_cost_1(b['observations']).squeeze()
+                cost_values_2 = self.agents[k].critic_cost_2(b['observations']).squeeze()
 
                 # Value clipping
                 if self.clip_vloss:
@@ -224,20 +294,50 @@ class IPPO:
                     v_loss_clipped = (v_clipped - b['returns']) ** 2
                     critic_loss = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
                     update_metrics[f"Agent_{k}/Critic Loss Non-Clipped"] = critic_loss.detach()
+
+                    # Cost critic 1
+                    v_loss_unclipped = (cost_values_1 - b['cost_returns_1']) ** 2
+                    v_clipped = b['cost_values_1'] + th.clamp(cost_values_1 - b['cost_values_1'], -self.clip, self.clip)
+                    v_loss_clipped = (v_clipped - b['cost_returns_1']) ** 2
+                    critic_cost_loss_1 = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
+
+                    # Cost critic 2
+                    v_loss_unclipped = (cost_values_2 - b['cost_returns_2']) ** 2
+                    v_clipped = b['cost_values_2'] + th.clamp(cost_values_2 - b['cost_values_2'], -self.clip, self.clip)
+                    v_loss_clipped = (v_clipped - b['cost_returns_2']) ** 2
+                    critic_cost_loss_2 = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
+
                 else:
                     # No value clipping
                     critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
+                    critic_cost_loss_1 = 0.5 * ((cost_values_1 - b['cost_returns_1']) ** 2).mean()
+                    critic_cost_loss_2 = 0.5 * ((cost_values_2 - b['cost_returns_2']) ** 2).mean()
 
                 update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
+                update_metrics[f"Agent_{k}/Constraint 1 Loss"] = critic_cost_loss_1.detach()
+                update_metrics[f"Agent_{k}/Constraint 2 Loss"] = critic_cost_loss_2.detach()
 
                 critic_loss = critic_loss * self.v_coef
-
                 self.agents[k].c_optimizer.zero_grad(True)
                 critic_loss.backward()
                 nn.utils.clip_grad_norm_(self.agents[k].critic.parameters(), self.max_grad_norm)
                 self.agents[k].c_optimizer.step()
 
-            loss = actor_loss - entropy_loss * self.entropy_value + critic_loss * self.v_coef
+                # Cost critic 1
+                critic_cost_loss_1 = critic_cost_loss_1 * self.v_coef
+                self.agents[k].c_cost_optimizer_1.zero_grad(True)
+                critic_cost_loss_1.backward()
+                nn.utils.clip_grad_norm_(self.agents[k].critic_cost_1.parameters(), self.max_grad_norm)
+                self.agents[k].c_cost_optimizer_1.step()
+
+                # Cost critic 2
+                critic_cost_loss_2 = critic_cost_loss_2 * self.v_coef
+                self.agents[k].c_cost_optimizer_2.zero_grad(True)
+                critic_cost_loss_2.backward()
+                nn.utils.clip_grad_norm_(self.agents[k].critic_cost_2.parameters(), self.max_grad_norm)
+                self.agents[k].c_cost_optimizer_2.step()
+
+            loss = actor_loss - entropy_loss * self.entropy_value + critic_loss + critic_cost_loss_1 + critic_cost_loss_2
             update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
         mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in
@@ -245,7 +345,7 @@ class IPPO:
         self.run_metrics["mean_loss"].append(mean_loss)
 
         # Run callbacks
-        for c in IPPO.callbacks:
+        for c in LagrIPPO.callbacks:
             if issubclass(type(c), UpdateCallback):
                 c.after_update()
 
@@ -256,12 +356,18 @@ class IPPO:
         return update_metrics
 
     def rollout(self):
-        sim_metrics = {"reward_per_agent": np.zeros(self.n_agents)}
+        th.set_num_threads(1)
+        self.sim_metrics = {
+            "reward_per_agent": np.zeros(self.n_agents),
+            "mean_episode_cost_1": np.zeros(self.n_agents),
+            "mean_episode_cost_2": np.zeros(self.n_agents),
+        }
 
         observation = self.environment_reset()
 
-        action, logprob, s_value = [{k: 0 for k in self.r_agents} for _ in range(3)]
+        action, logprob, s_value, c_value_1, c_value_2 = [{k: 0 for k in self.r_agents} for _ in range(5)]
         env_action, ep_reward = [np.zeros(self.n_agents) for _ in range(2)]
+        ep_cost_1, ep_cost_2 = [{k: np.zeros(self.n_steps) for k in self.r_agents} for _ in range(2)]
 
         for step in range(self.n_steps):
             self.run_metrics["global_step"] += 1
@@ -275,7 +381,10 @@ class IPPO:
                         _,
                     ) = self.agents[k].actor.get_action(observation[k])
                     if not self.eval_mode:
-                        pass # s_value[k] = self.agents[k].critic(observation[k])
+                        s_value[k] = self.agents[k].critic(observation[k])
+                        c_value_1[k] = self.agents[k].critic_cost_1(observation[k])
+                        c_value_2[k] = self.agents[k].critic_cost_2(observation[k])
+
             # TODO: Change action -> env_action mapping
             non_tensor_observation, reward, done, info = self.env.step(env_action)
             ep_reward += reward
@@ -284,12 +393,19 @@ class IPPO:
             done = _array_to_dict_tensor(self.r_agents, done, self.device)
             if not self.eval_mode:
                 for k in self.r_agents:
+                    ep_cost_1[k][step] = info["R'_N"][k]
+                    ep_cost_2[k][step] = info["R'_E"][k]
+
                     self.buffer[k].store(
                         observation[k],
                         action[k],
                         logprob[k],
                         reward[k],
+                        ep_cost_1[k][-1],
+                        ep_cost_2[k][-1],
                         s_value[k],
+                        c_value_1[k],
+                        c_value_2[k],
                         done[k]
                     )
 
@@ -298,16 +414,20 @@ class IPPO:
             # End of sim
             if all(list(done.values())):
                 self.run_metrics["ep_count"] += 1
-                sim_metrics["reward_per_agent"] += ep_reward
+                self.sim_metrics["reward_per_agent"] += ep_reward
+                self.sim_metrics["mean_episode_cost_1"] = [ep_cost_1[k].sum() / (self.n_steps / self.max_steps) for k in
+                                                           self.r_agents]
+                self.sim_metrics["mean_episode_cost_2"] = [ep_cost_2[k].sum() / (self.n_steps / self.max_steps) for k in
+                                                           self.r_agents]
                 ep_reward = np.zeros(self.n_agents)
                 # Reset environment
                 observation = self.environment_reset()
-        sim_metrics["reward_per_agent"] /= (self.n_steps / self.max_steps)
+        self.sim_metrics["reward_per_agent"] /= (self.n_steps / self.max_steps)
 
-        self.run_metrics["avg_reward"].append(sim_metrics["reward_per_agent"].mean())
+        self.run_metrics["avg_reward"].append(self.sim_metrics["reward_per_agent"].mean())
         # Save mean reward per agent
         for k in self.r_agents:
-            self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = sim_metrics["reward_per_agent"][k].mean()
+            self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = self.sim_metrics["reward_per_agent"][k].mean()
         return np.array(
             [self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
 
@@ -320,19 +440,24 @@ class IPPO:
             for k, v in self.init_args.__dict__.items():
                 setattr(self, k, v)
         if set_agents is None:
-            for k in self.r_agents:
-                self.agents[k] = Agent(
-                    SoftmaxActor(self.o_size, self.a_size, self.h_size, self.h_layers).to(self.device),
-                    Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
-                    self.init_args.actor_lr,
-                    self.init_args.critic_lr,
-                )
-                self.buffer[k] = Buffer(self.o_size, self.n_steps, self.max_steps, self.gamma,
+            self.agents[k] = LagrAgent(
+                SoftmaxActor(self.o_size, self.a_size, self.h_size, self.h_layers).to(self.device),
+                Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
+                Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
+                Critic(self.o_size, self.h_size, self.h_layers).to(self.device),
+                self.actor_lr,
+                self.critic_lr,
+                self.constr_limit_1,
+                self.constr_limit_2,
+                self.mult_lr,
+                self.mult_init,
+            )
+            self.buffer[k] = LagrBuffer(self.o_size, self.n_steps, self.max_steps, self.gamma,
                                         self.gae_lambda, self.device)
         else:
             self.agents = set_agents
 
-        # Reset run metrics:
+        # Reset run metrics:    NOTE: would probably add cost metrics
         self.run_metrics = {
             'global_step': 0,
             'ep_count': 0,
@@ -468,6 +593,8 @@ class IPPO:
         for k in self.r_agents:
             th.save(self.agents[k].actor.state_dict(), folder + f"/actor_{k}.pth")
             th.save(self.agents[k].critic.state_dict(), folder + f"/critic_{k}.pth")
+            th.save(self.agents[k].critic_cost_1.state_dict(), folder + f"/critic_cost_1{k}.pth")
+            th.save(self.agents[k].critic_cost_2.state_dict(), folder + f"/critic_cost_2{k}.pth")
             self.agents[k].save_dir = folder
 
         # Save the args as a json file
@@ -491,19 +618,19 @@ class IPPO:
             else:
                 raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
         else:
-                if isinstance(callbacks, list):
-                    for c in callbacks:
-                        if not issubclass(type(c), Callback):
-                            raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
-                        c.ppo = self
-                        c.initiate()
-                    IPPO.callbacks = callbacks
-                elif isinstance(callbacks, Callback):
-                    callbacks.ppo = self
-                    callbacks.initiate()
-                    IPPO.callbacks.append(callbacks)
-                else:
-                    raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
+            if isinstance(callbacks, list):
+                for c in callbacks:
+                    if not issubclass(type(c), Callback):
+                        raise TypeError("Element of class ", type(c).__name__, " not a subclass from Callback")
+                    c.ppo = self
+                    c.initiate()
+                LagrIPPO.callbacks = callbacks
+            elif isinstance(callbacks, Callback):
+                callbacks.ppo = self
+                callbacks.initiate()
+                LagrIPPO.callbacks.append(callbacks)
+            else:
+                raise TypeError("Callbacks must be a Callback subclass or a list of Callback subclasses")
 
     def load_checkpoint(self, folder):
         # Load the args from the folder
@@ -522,5 +649,15 @@ class IPPO:
                 critic = Critic(o_size, args.h_size, args.h_layers).to(self.device)
                 critic.load_state_dict(model_critic)
 
-                agents[k] = Agent(actor, critic, args.actor_lr, args.critic_lr)
+                model_critic_cost_1 = th.load(folder + f"/critic_cost_1_{k}.pth")
+                critic_cost_1 = Critic(o_size, args.h_size, args.h_layers).to(self.device)
+                critic_cost_1.load_state_dict(model_critic_cost_1)
+
+                model_critic_cost_2 = th.load(folder + f"/critic_cost_2_{k}.pth")
+                critic_cost_2 = Critic(o_size, args.h_size, args.h_layers).to(self.device)
+                critic_cost_2.load_state_dict(model_critic_cost_2)
+
+                agents[k] = LagrAgent(actor, critic, critic_cost_1, critic_cost_2, args.actor_lr, args.critic_lr,
+                                      args.constr_limit_1, args.constr_limit_2, args.mult_lr, args.mult_init)
+
             self.agents = agents
