@@ -237,7 +237,7 @@ class IPPO:
                 nn.utils.clip_grad_norm_(self.agents[k].critic.parameters(), self.max_grad_norm)
                 self.agents[k].c_optimizer.step()
 
-            loss = actor_loss - entropy_loss * self.entropy_value + critic_loss * self.v_coef
+            loss = actor_loss - entropy_loss * self.entropy_value + critic_loss
             update_metrics[f"Agent_{k}/Loss"] = loss.detach()
         self.update_metrics = update_metrics
         mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in
