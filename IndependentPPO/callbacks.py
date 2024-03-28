@@ -156,13 +156,20 @@ class Report2Optuna(UpdateCallback):
 # Printing Wrappers:
 class PrintAverageReward(UpdateCallback):
 
-    def __init__(self, ppo, n=100):
+    def __init__(self, ppo, n=100, show_time=False):
         super().__init__(ppo)
         self.n = n
+        self.show_time = show_time
+        self.t0 = time.time()
 
     def after_update(self):
         if self.ppo.run_metrics["ep_count"] % self.n == 0:
-            print(f"Average Reward: {np.array(self.ppo.run_metrics['avg_reward']).mean()}")
+            s = ""
+            s += f"Average Reward: {np.array(self.ppo.run_metrics['avg_reward']).mean()}"
+            if self.show_time:
+                s += f"\t | SPS: {self.ppo.n_steps/(time.time() - self.t0)}"
+                self.t0 = time.time()
+
 
     def before_update(self):
         pass
