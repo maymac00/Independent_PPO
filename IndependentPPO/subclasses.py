@@ -15,6 +15,7 @@ class ParallelIPPO(IPPO):
         super().__init__(args, env, run_name)
         self.logger.info("Parallelizing environments")
         self.parallelize = True
+        self.available_threads = th.get_num_threads()
         main_process_threads = th.get_num_threads()
         if self.n_envs > main_process_threads:
             raise Exception(
@@ -56,7 +57,8 @@ class ParallelIPPO(IPPO):
         for k in self.r_agents:
             self.run_metrics["agent_performance"][f"Agent_{k}/Reward"] = rew[:, k].mean()
 
-        return np.array([self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
+        return np.array(
+            [self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
 
     def _parallel_rollout(self, tasks):
         env, result, env_id = tasks
@@ -117,6 +119,10 @@ class ParallelIPPO(IPPO):
             sim_metrics[i]["reward_per_agent"] = d[i]["reward_per_agent"]
             sim_metrics[i]["global_step"] = d[i]["global_step"]
         return sim_metrics
+
+    def update(self):
+        th.set_num_threads(self.available_threads)
+        return super().update()
 
 
 if __name__ == "__main__":

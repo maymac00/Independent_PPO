@@ -32,4 +32,6 @@ def set_seeds(seed: int, deterministic: Optional[bool]):
 
 def set_torch(n_cpus: int, cuda: bool) -> th.device:
     th.set_num_threads(n_cpus)
+    if th.cuda.is_available() and cuda:
+        print("Using CUDA")
     return th.device("cuda" if th.cuda.is_available() and cuda else "cpu")

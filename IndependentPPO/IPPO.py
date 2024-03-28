@@ -157,7 +157,6 @@ class IPPO:
             return observation
 
     def update(self):
-
         # Run callbacks
         for c in IPPO.callbacks:
             if issubclass(type(c), UpdateCallback):

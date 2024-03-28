@@ -201,6 +201,7 @@ class CIPPO:
             if issubclass(type(c), UpdateCallback):
                 c.before_update()
 
+        th.set_num_threads(1)
         update_metrics = {}
 
         with th.no_grad():
@@ -684,6 +685,7 @@ class ParallelCIPPO(CIPPO):
                 "Efficency is maximized when the number of parallelized environments is equal to n_steps/max_steps.")
 
     def rollout(self):
+        th.set_num_threads(1)
         with Manager() as manager:
             d = manager.dict()
             batch_size = int(self.n_steps / self.max_steps)
