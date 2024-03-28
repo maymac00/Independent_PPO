@@ -169,6 +169,7 @@ class PrintAverageReward(UpdateCallback):
             if self.show_time:
                 s += f"\t | SPS: {self.ppo.n_steps/(time.time() - self.t0)}"
                 self.t0 = time.time()
+            print(s)
 
 
     def before_update(self):
