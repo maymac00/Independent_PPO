@@ -13,8 +13,6 @@ import gym
 import matplotlib
 
 if __name__ == "__main__":
-
-    matplotlib.use("TkAgg")
     tiny["we"] = [1, 99]
     large["n_agents"] = 5
     env = gym.make("MultiAgentEthicalGathering-v1", **large)
@@ -28,7 +26,7 @@ if __name__ == "__main__":
         "max_steps": 500,
         "n_agents": 5,
         "n_steps": 2500,
-        "tot_steps": 5000000,
+        "tot_steps": 10000,
         "save_dir": "example_data",
         "early_stop": 15000,
         "past_actions_memory": 0,
@@ -60,7 +58,7 @@ if __name__ == "__main__":
         "clip_vloss": True,
     }
 
-    ppo = ParallelIPPO(args, env=env)
+    ppo = IPPO(args, env=env)
     # ppo = ParallelCIPPO(args, env=env)
     # ppo = CIPPO(args, env=env)
 

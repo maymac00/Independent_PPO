@@ -26,7 +26,7 @@ class IndependentPPOAnnealing(LRScheduler):
         super().__init__(ppo)
         self.initial_lr_rates_per_agent = initial_lr_rates_per_agent
         # Check dict is valid
-        assert list(initial_lr_rates_per_agent.keys()) == list(self.ppo.r_agents), \
+        assert sorted(list(initial_lr_rates_per_agent.keys())) == sorted(list(self.ppo.r_agents)), \
             "initial_lr_rates_per_agent keys must match ppo.r_agents keys"
         for k in initial_lr_rates_per_agent.keys():
             assert "actor_lr" in initial_lr_rates_per_agent[k], \

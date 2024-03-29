@@ -4,8 +4,7 @@ from IndependentPPO.IPPO import IPPO, _array_to_dict_tensor
 import torch as th
 import warnings
 import numpy as np
-import multiprocessing as mp
-from multiprocessing import Manager
+from torch.multiprocessing import Manager, Pool
 from IndependentPPO.utils.memory import merge_buffers, Buffer
 
 
@@ -13,6 +12,9 @@ class ParallelIPPO(IPPO):
 
     def __init__(self, args, env, run_name=None):
         super().__init__(args, env, run_name)
+        if self.cuda:
+            th.multiprocessing.set_start_method("spawn")
+
         self.logger.info("Parallelizing environments")
         self.parallelize = True
         self.available_threads = th.get_num_threads()
@@ -27,6 +29,7 @@ class ParallelIPPO(IPPO):
                 "Efficency is maximized when the number of parallelized environments is equal to n_steps/max_steps.")
 
     def rollout(self):
+
         with Manager() as manager:
             d = manager.dict()
             batch_size = int(self.n_steps / self.max_steps)
@@ -36,7 +39,7 @@ class ParallelIPPO(IPPO):
                 runs = min(self.n_envs, batch_size - solved)
                 # print("Running ", runs, " tasks")
                 tasks = [(self.env, d, global_id) for global_id in range(solved, solved + runs)]
-                with mp.Pool(runs) as p:
+                with Pool(runs) as p:
                     p.map(self._parallel_rollout, tasks[:runs])
                 # Remove solved tasks
                 solved += runs
