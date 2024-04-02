@@ -155,12 +155,6 @@ class CIPPO:
         self.buffer = None
         self.agents, self.buffer = {}, {}
 
-        # Lagr parameters: NOTE must add and take these from config.py
-        self.mult_lr = 0.035
-        self.mult_init = 0.5
-        self.constr_limit_1 = 10
-        self.constr_limit_2 = 10
-
         for k in self.r_agents:
             self.agents[k] = LagrAgent(
                 SoftmaxActor(self.o_size, self.a_size, self.h_size, self.h_layers).to(self.device),
