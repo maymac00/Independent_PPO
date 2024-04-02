@@ -61,6 +61,18 @@ class AnnealEntropy(UpdateCallback):
             self.ppo.entropy_value = frac * self.ppo.init_args.ent_coef
 
 
+class AnnealActionFilter(UpdateCallback):
+    def __init__(self, ppo):
+        super().__init__(ppo)
+        self.filter = filter
+
+    def before_update(self):
+        pass
+
+    def after_update(self):
+        self.ppo.filter = self.filter
+
+
 class SaveCheckpoint(UpdateCallback):
     def __init__(self, ppo, n=1000):
         super().__init__(ppo)
@@ -78,7 +90,7 @@ class TensorBoardLogging(UpdateCallback):
     def __init__(self, ppo, log_dir, f=1):
         super().__init__(ppo)
         self.writer = SummaryWriter(log_dir=log_dir)
-        self.freq = f   # Frequency of logging
+        self.freq = f  # Frequency of logging
         self.writer.add_text(
             "hyperparameters",
             "|param|value|\n|-|-|\n%s" % (
@@ -97,7 +109,8 @@ class TensorBoardLogging(UpdateCallback):
                 # Log metrics from run metrics (avg reward), update metrics, and ppo parameters (e.g. entropy, lr)
                 self.writer.add_scalar("Training/Avg Reward", np.array(self.ppo.run_metrics["avg_reward"]).mean(),
                                        self.ppo.run_metrics["global_step"])
-                self.writer.add_scalar("Training/Entropy coef", self.ppo.entropy_value, self.ppo.run_metrics["global_step"])
+                self.writer.add_scalar("Training/Entropy coef", self.ppo.entropy_value,
+                                       self.ppo.run_metrics["global_step"])
                 self.writer.add_scalar("Training/Actor LR", self.ppo.actor_lr, self.ppo.run_metrics["global_step"])
                 self.writer.add_scalar("Training/Critic LR", self.ppo.critic_lr, self.ppo.run_metrics["global_step"])
                 self.writer.add_scalar("Training/SPS",
@@ -167,10 +180,9 @@ class PrintAverageReward(UpdateCallback):
             s = ""
             s += f"Average Reward: {np.array(self.ppo.run_metrics['avg_reward']).mean()}"
             if self.show_time:
-                s += f"\t | SPS: {self.ppo.n_steps*self.n/(time.time() - self.t0)}"
+                s += f"\t | SPS: {self.ppo.n_steps * self.n / (time.time() - self.t0)}"
                 self.t0 = time.time()
             print(s)
-
 
     def before_update(self):
         pass

@@ -104,7 +104,7 @@ class CIPPO:
 
         # Logging
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(logging.ERROR)
+        self.logger.setLevel(logging.INFO)
         # Check if the logger already has a handler
         if len(self.logger.handlers) == 0:
             ch = logging.StreamHandler()

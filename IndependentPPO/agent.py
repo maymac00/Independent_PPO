@@ -11,7 +11,7 @@ ACTIONS = [0, 1, 2, 3, 4, 5, 6]
 
 
 class Agent:
-    def __init__(self, actor, critic, actor_lr, critic_lr):
+    def __init__(self, actor, critic, actor_lr, critic_lr, filter=None):
         self.actor = actor
         self.critic = critic
         self.a_optimizer = optim.Adam(list(self.actor.parameters()), lr=actor_lr, eps=1e-5)
@@ -43,17 +43,20 @@ class Agent:
 
     def __str__(self):
         return str(self.getId())
-    
+
+
 class LagrAgent(Agent):
     # A Lagrangian Agent is an agent with an additional critic for the cost value function, a lagrangian multiplier for the constraint, and its learning rate
-    def __init__(self, actor, critic, critic_cost_1, critic_cost_2, actor_lr, critic_lr, constr_limit_1, constr_limit_2, mult_lr, mult_init=0.5):
+    def __init__(self, actor, critic, critic_cost_1, critic_cost_2, actor_lr, critic_lr, constr_limit_1, constr_limit_2,
+                 mult_lr, mult_init=0.5):
         super().__init__(actor, critic, actor_lr, critic_lr)
 
         # Setting up the cost value functions
         self.critic_cost_1 = critic_cost_1
-        self.c_cost_optimizer_1 = optim.Adam(list(self.critic_cost_1.parameters()), lr=critic_lr, eps=1e-5)  
+        self.c_cost_optimizer_1 = optim.Adam(list(self.critic_cost_1.parameters()), lr=critic_lr, eps=1e-5)
         self.critic_cost_2 = critic_cost_2
-        self.c_cost_optimizer_2 = optim.Adam(list(self.critic_cost_2.parameters()), lr=critic_lr, eps=1e-5)  # We usually set the same lr for the critics
+        self.c_cost_optimizer_2 = optim.Adam(list(self.critic_cost_2.parameters()), lr=critic_lr,
+                                             eps=1e-5)  # We usually set the same lr for the critics
 
         # Setting up the Lagrangian multipliers
         self.lag_mul_1 = th.tensor(mult_init, requires_grad=True, device=self.device)
@@ -100,7 +103,8 @@ def Linear(input_dim, output_dim, act_fn='leaky_relu', init_weight_uniform=True)
 
 
 class SoftmaxActor(nn.Module):
-    action_selection = bottom_filter
+    eval_action_selection = FilterSoftmaxActionSelection(ACTIONS, threshold=0.1)
+    action_selection = SoftmaxActionSelection(ACTIONS)
 
     def __init__(self, o_size: int, a_size: int, h_size: int, h_layers: int, eval=False):
         super().__init__()
@@ -127,9 +131,8 @@ class SoftmaxActor(nn.Module):
     def get_action_data(self, prob, action=None):
         env_action = None
         if action is None:
-            if not self.eval_mode:
-                action = th.multinomial(prob, 1)
-            env_action = ACTIONS[action]
+            action, env_action = SoftmaxActor.action_selection.action_selection(np.array(prob, dtype='float64').squeeze())
+            action = th.tensor(action)
 
         logprob = th.log(prob)
         entropy = -(prob * logprob).sum(-1)
@@ -145,6 +148,12 @@ class SoftmaxActor(nn.Module):
             prob = self.forward(x)
             action = SoftmaxActor.action_selection(np.array(prob, dtype='float64').squeeze())
         return ACTIONS[action]
+
+    def select_action(self, probs):
+        if self.eval_mode:
+            return SoftmaxActor.eval_action_selection.action_selection(probs)
+        else:
+            return SoftmaxActor.action_selection.action_selection(probs)
 
     def freeze(self):
         for param in self.parameters():

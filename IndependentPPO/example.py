@@ -60,8 +60,8 @@ args = {
     "constr_limit_2": 3,
 }
 
-ppo = ParallelCIPPO(args, env=env)
-# ppo = CIPPO(args, env=env)
+# ppo = ParallelCIPPO(args, env=env)
+ppo = CIPPO(args, env=env)
 
 ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
     0: {"actor_lr": 0.0003, "critic_lr": 0.004},
