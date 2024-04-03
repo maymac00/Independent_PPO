@@ -6,10 +6,12 @@ from EthicalGatheringGame.presets import tiny, large
 from EthicalGatheringGame.wrappers import NormalizeReward
 from IPPO import IPPO
 from CIPPO import CIPPO, ParallelCIPPO
-from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward
+from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, AnnealActionFilter
 from lr_schedules import IndependentPPOAnnealing
 import gym
 import matplotlib
+from agent import Agent, LagrAgent
+from ActionSelection import FilterSoftmaxActionSelection
 
 # matplotlib.use("TkAgg")
 tiny["we"] = [1, 99]
@@ -58,6 +60,7 @@ args = {
     "mult_init": 0.5,
     "constr_limit_1": 3,
     "constr_limit_2": 3,
+    "anneal_action_filter": True,
 }
 
 ppo = ParallelCIPPO(args, env=env)
@@ -72,6 +75,8 @@ ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
 })
 ppo.addCallbacks(PrintAverageReward(ppo, 1, show_time=True))
 ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.5, args["concavity_entropy"]))
+if args["anneal_action_filter"]:
+    ppo.addCallbacks(AnnealActionFilter(ppo))
 # ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
 # ppo.addCallbacks(SaveCheckpoint(ppo, 100))
 

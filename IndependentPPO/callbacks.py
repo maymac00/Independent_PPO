@@ -7,6 +7,8 @@ from torch.utils.tensorboard import SummaryWriter
 from abc import ABC, abstractmethod
 import sqlite3
 import torch as th
+from ActionSelection import FilterSoftmaxActionSelection
+from agent import Agent, LagrAgent
 
 
 class Callback(ABC):
@@ -62,15 +64,20 @@ class AnnealEntropy(UpdateCallback):
 
 
 class AnnealActionFilter(UpdateCallback):
-    def __init__(self, ppo):
+    def __init__(self, ppo, thd_init=0.1):
         super().__init__(ppo)
-        self.filter = filter
+        LagrAgent.action_filter = FilterSoftmaxActionSelection(range(self.ppo.a_size), threshold=thd_init)
+        self.init_value = LagrAgent.action_filter.threshold
 
     def before_update(self):
         pass
 
     def after_update(self):
-        self.ppo.filter = self.filter
+        if isinstance(LagrAgent.action_filter, FilterSoftmaxActionSelection):
+            update = self.ppo.run_metrics["global_step"] / self.ppo.n_steps
+            frac = (update - 1.0) / self.ppo.n_updates
+            LagrAgent.action_filter.threshold = frac * self.init_value
+            print(LagrAgent.action_filter.threshold)
 
 
 class SaveCheckpoint(UpdateCallback):

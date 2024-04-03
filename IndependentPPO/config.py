@@ -62,7 +62,8 @@ def parse_ppo_args():
 
     parser.add_argument("--anneal-entropy", type=str2bool, default=True, help="Toggles annealing entropy coefficient")
     parser.add_argument("--concavity-entropy", type=float, default=3.5, help="Sets concavity of entropy coefficient")
-
+    parser.add_argument("--anneal-action-filter", type=str2bool, default=False,
+                        help="Sets action filter annealing")
     # Lagrangian PPO
     parser.add_argument("--constr-limit-1", type=float, default=2, help="Sets the limit of the constraint 1")
     parser.add_argument("--constr-limit-2", type=float, default=2, help="Sets the limit of the constraint 2")
@@ -160,6 +161,8 @@ def args_from_json(directory):
 
     parser.add_argument("--anneal-entropy", type=str2bool, default=True, help="Toggles annealing entropy coefficient")
     parser.add_argument("--concavity-entropy", type=float, default=3.5, help="Sets concavity of entropy coefficient")
+    parser.add_argument("--anneal-action-filter", type=str2bool, default=False,
+                        help="Sets action filter annealing")
 
     # Lagrangian PPO
     parser.add_argument("--constr-lim-1", type=float, default=2, help="Sets the limit of the constraint 1")
