@@ -77,7 +77,6 @@ class AnnealActionFilter(UpdateCallback):
             update = self.ppo.run_metrics["global_step"] / self.ppo.n_steps
             frac = (update - 1.0) / self.ppo.n_updates
             LagrAgent.action_filter.threshold = frac * self.init_value
-            print(LagrAgent.action_filter.threshold)
 
 
 class SaveCheckpoint(UpdateCallback):
