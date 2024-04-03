@@ -165,8 +165,8 @@ def args_from_json(directory):
                         help="Sets action filter annealing")
 
     # Lagrangian PPO
-    parser.add_argument("--constr-lim-1", type=float, default=2, help="Sets the limit of the constraint 1")
-    parser.add_argument("--constr-lim-2", type=float, default=2, help="Sets the limit of the constraint 2")
+    parser.add_argument("--constr-limit-1", type=float, default=2, help="Sets the limit of the constraint 1")
+    parser.add_argument("--constr-limit-2", type=float, default=2, help="Sets the limit of the constraint 2")
     parser.add_argument("--mult-lr", type=float, default=0.035, help="Sets initial value of the learning rate for the lagrangian multiplier")
     parser.add_argument("--mult-init", type=float, default=0.5, help="Sets initial value of the lagrangian multiplier")
 
