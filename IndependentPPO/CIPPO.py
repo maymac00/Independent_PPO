@@ -195,7 +195,7 @@ class CIPPO:
             if issubclass(type(c), UpdateCallback):
                 c.before_update()
 
-        th.set_num_threads(1)
+        th.set_num_threads(self.n_cpus)
         update_metrics = {}
 
         with th.no_grad():
