@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 from abc import ABC, abstractmethod
 import sqlite3
 import torch as th
-from ActionSelection import FilterSoftmaxActionSelection
+from IndependentPPO.ActionSelection import FilterSoftmaxActionSelection
 from agent import Agent, LagrAgent
 
 
