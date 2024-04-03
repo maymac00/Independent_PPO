@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import sqlite3
 import torch as th
 from IndependentPPO.ActionSelection import FilterSoftmaxActionSelection
-from agent import Agent, LagrAgent
+from IndependentPPO.agent import Agent, LagrAgent
 
 
 class Callback(ABC):
