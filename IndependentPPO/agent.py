@@ -131,7 +131,7 @@ class SoftmaxActor(nn.Module):
     def get_action_data(self, prob, action=None):
         env_action = None
         if action is None:
-            action, env_action = SoftmaxActor.action_selection.action_selection(np.array(prob, dtype='float64').squeeze())
+            action, env_action = self.select_action(np.array(prob, dtype='float64').squeeze())
             action = th.tensor(action)
 
         logprob = th.log(prob)
@@ -146,7 +146,7 @@ class SoftmaxActor(nn.Module):
             x = th.tensor(x, dtype=th.float32)
         with th.no_grad():
             prob = self.forward(x)
-            action, env_action = SoftmaxActor.action_selection.action_selection(np.array(prob, dtype='float64').squeeze())
+            action, env_action = self.select_action(np.array(prob, dtype='float64').squeeze())
         return env_action
 
     def select_action(self, probs):
