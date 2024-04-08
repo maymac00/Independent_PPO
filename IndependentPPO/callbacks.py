@@ -186,7 +186,7 @@ class PrintAverageReward(UpdateCallback):
             s = ""
             s += f"Average Reward: {np.array(self.ppo.run_metrics['avg_reward']).mean()}"
             if self.show_time:
-                s += f"\t | SPS: {self.ppo.n_steps * self.n / (time.time() - self.t0)}"
+                s += f"\t | SPS: {self.ppo.max_steps * self.n / (time.time() - self.t0)}"
                 self.t0 = time.time()
             print(s)
 

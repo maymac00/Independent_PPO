@@ -4,6 +4,8 @@ pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
 """
 from EthicalGatheringGame.presets import tiny, large
 from EthicalGatheringGame.wrappers import NormalizeReward
+from IndependentPPO.subclasses import ParallelIPPO
+
 from IPPO import IPPO
 from CIPPO import CIPPO, ParallelCIPPO
 from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, AnnealActionFilter
@@ -63,7 +65,7 @@ args = {
     "anneal_action_filter": True,
 }
 
-ppo = ParallelCIPPO(args, env=env)
+ppo = ParallelIPPO(args, env=env)
 # ppo = CIPPO(args, env=env)
 
 ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
@@ -73,7 +75,7 @@ ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
     3: {"actor_lr": 0.0001, "critic_lr": 0.0005},
     4: {"actor_lr": 0.0001, "critic_lr": 0.0005},
 })
-ppo.addCallbacks(PrintAverageReward(ppo, 1, show_time=True))
+ppo.addCallbacks(PrintAverageReward(ppo, 5, show_time=True))
 ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.5, args["concavity_entropy"]))
 if args["anneal_action_filter"]:
     ppo.addCallbacks(AnnealActionFilter(ppo))
