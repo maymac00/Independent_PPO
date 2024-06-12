@@ -210,6 +210,13 @@ class IPPO:
 
                 self.agents[k].a_optimizer.zero_grad(True)
                 actor_loss.backward()
+
+                if self.log_gradients:
+                    for name, param in self.agents[k].actor.named_parameters():
+                        if param.grad is not None:
+                            grad_norm = param.grad.norm().item()
+                            update_metrics[f"Agent_{k}/ZGradients: {name}"] = grad_norm
+
                 nn.utils.clip_grad_norm_(self.agents[k].actor.parameters(), self.max_grad_norm)
                 self.agents[k].a_optimizer.step()
 

@@ -76,6 +76,7 @@ def parse_ppo_args():
 
     # Metrics
     parser.add_argument("--last-n", type=int, default=500, help="Average last n metrics")
+    parser.add_argument("--log-gradients", type=str2bool, default=False, help="Log gradients of each layer")
 
     # Torch
     parser.add_argument("--n-cpus", type=int, default=8, help="N° of cpus/max threads for process")
@@ -176,6 +177,7 @@ def args_from_json(directory):
 
     # Metrics
     parser.add_argument("--last-n", type=int, help="Average last n metrics")
+    parser.add_argument("--log-gradients", type=str2bool, default=False, help="Log gradients of each layer")
 
     # Torch
     parser.add_argument("--n-cpus", type=int, help="N° of cpus/max threads for process")
