@@ -204,7 +204,7 @@ class IPPO:
                 actor_clip_loss = mb_advantages * clipped_ratios
 
                 # Log percent of clipped ratio
-                update_metrics[f"Agent_{k}/Clipped Ratio"] = (ratio < 1 - self.clip).sum().item() + (ratio > 1 + self.clip).sum().item()
+                update_metrics[f"Agent_{k}/Clipped Ratio"] = ((ratio < 1 - self.clip).sum().item() + (ratio > 1 + self.clip).sum().item()) / np.prod(ratio.shape)
 
                 # Calculate clip fraction
                 actor_loss = th.min(actor_loss, actor_clip_loss).mean()
