@@ -237,8 +237,8 @@ class IPPO:
                     v_loss_clipped = th.min(v_loss_unclipped, v_clipped)
 
                     # Log percent of clipped ratio
-                    update_metrics[f"Agent_{k}/Critic Clipped Ratio"] = ((values < (values - self.clip)).sum().item() + (
-                                values > (values + self.clip)).sum().item()) / np.prod(values.shape)
+                    update_metrics[f"Agent_{k}/Critic Clipped Ratio"] = ((values < (b['values'] - self.clip)).sum().item() + (
+                                values > (b['values'] + self.clip)).sum().item()) / np.prod(values.shape)
 
                     critic_loss = 0.5 * v_loss_clipped.mean()
                     update_metrics[f"Agent_{k}/Critic Loss Non-Clipped"] = critic_loss.detach()
