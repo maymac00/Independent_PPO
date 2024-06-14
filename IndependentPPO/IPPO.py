@@ -204,7 +204,7 @@ class IPPO:
                 actor_clip_loss = mb_advantages * clipped_ratios
 
                 # Log percent of clipped ratio
-                update_metrics[f"Agent_{k}/Clipped Ratio"] = ((ratio < 1 - self.clip).sum().item() + (ratio > 1 + self.clip).sum().item()) / np.prod(ratio.shape)
+                update_metrics[f"Agent_{k}/Clipped Ratio"] = ((ratio < (1 - self.clip)).sum().item() + (ratio > (1 + self.clip)).sum().item()) / np.prod(ratio.shape)
 
                 # Calculate clip fraction
                 actor_loss = th.min(actor_loss, actor_clip_loss).mean()
@@ -232,9 +232,15 @@ class IPPO:
                 # Value clipping
                 if self.clip_vloss:
                     v_loss_unclipped = (values - b['returns']) ** 2
-                    v_clipped = b['values'] + th.clamp(values - b['values'], -self.clip, self.clip)
-                    v_loss_clipped = (v_clipped - b['returns']) ** 2
-                    critic_loss = 0.5 * th.max(v_loss_unclipped, v_loss_clipped).mean()
+
+                    v_clipped = (th.clamp(values, b['values'] - self.clip, b['values'] + self.clip) - b['returns']) ** 2
+                    v_loss_clipped = th.min(v_loss_unclipped, v_clipped)
+
+                    # Log percent of clipped ratio
+                    update_metrics[f"Agent_{k}/Critic Clipped Ratio"] = ((values < (values - self.clip)).sum().item() + (
+                                values > (values + self.clip)).sum().item()) / np.prod(values.shape)
+
+                    critic_loss = 0.5 * v_loss_clipped.mean()
                     update_metrics[f"Agent_{k}/Critic Loss Non-Clipped"] = critic_loss.detach()
                 else:
                     # No value clipping
