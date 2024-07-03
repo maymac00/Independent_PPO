@@ -7,8 +7,8 @@ from torch.utils.tensorboard import SummaryWriter
 from abc import ABC, abstractmethod
 import sqlite3
 import torch as th
-from IndependentPPO.ActionSelection import FilterSoftmaxActionSelection
-from IndependentPPO.agent import Agent, LagrAgent
+from ActionSelection import FilterSoftmaxActionSelection
+from agent import Agent, LagrAgent
 
 
 class Callback(ABC):
@@ -93,8 +93,9 @@ class SaveCheckpoint(UpdateCallback):
 
 
 class TensorBoardLogging(UpdateCallback):
-    def __init__(self, ppo, log_dir, f=1):
+    def __init__(self, ppo, log_dir, f=1, mo=False):
         super().__init__(ppo)
+        self.mo = mo
         self.writer = SummaryWriter(log_dir=log_dir)
         self.freq = f  # Frequency of logging
         self.writer.add_text(
@@ -113,7 +114,13 @@ class TensorBoardLogging(UpdateCallback):
             if self.ppo.run_metrics["ep_count"] % self.freq == 0:
                 th.set_num_threads(1)
                 # Log metrics from run metrics (avg reward), update metrics, and ppo parameters (e.g. entropy, lr)
-                self.writer.add_scalar("Training/Avg Reward", np.array(self.ppo.run_metrics["avg_reward"]).mean(),
+                if self.mo:
+                    for r in range(self.ppo.reward_size):
+                        self.writer.add_scalar(f"Training/Avg Reward Obj {r}",
+                                       np.array(self.ppo.run_metrics[f"avg_reward_obj{r}"]).mean(),
+                                       self.ppo.run_metrics["global_step"])
+                else:
+                    self.writer.add_scalar("Training/Avg Reward", np.array(self.ppo.run_metrics["avg_reward"]).mean(),
                                        self.ppo.run_metrics["global_step"])
                 self.writer.add_scalar("Training/Entropy coef", self.ppo.entropy_value,
                                        self.ppo.run_metrics["global_step"])
@@ -174,7 +181,6 @@ class Report2Optuna(UpdateCallback):
 
 # Printing Wrappers:
 class PrintAverageReward(UpdateCallback):
-
     def __init__(self, ppo, n=100, show_time=False):
         super().__init__(ppo)
         self.n = n
@@ -185,6 +191,27 @@ class PrintAverageReward(UpdateCallback):
         if self.ppo.run_metrics["ep_count"] % self.n == 0:
             s = ""
             s += f"Average Reward: {np.array(self.ppo.run_metrics['avg_reward']).mean()}"
+            if self.show_time:
+                s += f"\t | SPS: {self.ppo.max_steps * self.n / (time.time() - self.t0)}"
+                self.t0 = time.time()
+            print(s)
+
+    def before_update(self):
+        pass
+
+
+class PrintAverageRewardMO(UpdateCallback):
+    def __init__(self, ppo, n=100, show_time=False):
+        super().__init__(ppo)
+        self.n = n
+        self.show_time = show_time
+        self.t0 = time.time()
+
+    def after_update(self):
+        if self.ppo.run_metrics["ep_count"] % self.n == 0:
+            s = ""
+            for r in range(self.ppo.reward_size):
+                s += f"Average Reward: {np.array(self.ppo.run_metrics[f'avg_reward_obj{r}']).mean()} \t"
             if self.show_time:
                 s += f"\t | SPS: {self.ppo.max_steps * self.n / (time.time() - self.t0)}"
                 self.t0 = time.time()

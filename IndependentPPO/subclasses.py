@@ -38,7 +38,7 @@ class ParallelIPPO(IPPO):
             while solved < batch_size:
                 runs = min(self.n_envs, batch_size - solved)
                 # print("Running ", runs, " tasks")
-                tasks = [(self.env, d, global_id) for global_id in range(solved, solved + runs)]
+                tasks = [(self.env, d, global_id, np.random.randint(0, 2**32 - 1)) for global_id in range(solved, solved + runs)]
                 with Pool(runs) as p:
                     p.map(self._parallel_rollout, tasks[:runs])
                 # Remove solved tasks
@@ -48,10 +48,11 @@ class ParallelIPPO(IPPO):
             sim_metrics = self._parallel_results(d, batch_size)
 
             # We set the global env state of the environment to the first parallelized environment
-            self.env.__dict__.update(d[0]["env_state"])
+            #self.env.__dict__.update(d[0]["env_state"])
             # Merge the results
             for k in self.r_agents:
-                self.buffer[k] = merge_buffers([d[i]["single_buffer"][k] for i in range(batch_size)])
+                buffs = [d[i]["single_buffer"][k] for i in range(batch_size)]
+                self.buffer[k] = sum(buffs[1:], buffs[0])
         self.run_metrics['ep_count'] += solved
         self.run_metrics['global_step'] += solved * self.max_steps
         rew = np.array([s["reward_per_agent"] for s in sim_metrics])
@@ -64,7 +65,8 @@ class ParallelIPPO(IPPO):
             [self.run_metrics["agent_performance"][f"Agent_{self.r_agents[k]}/Reward"] for k in self.r_agents])
 
     def _parallel_rollout(self, tasks):
-        env, result, env_id = tasks
+        env, result, env_id, seed = tasks
+        np.random.seed(seed)
         th.set_num_threads(1)
         data = {"global_step": self.run_metrics["global_step"], "reward_per_agent": None}
 
@@ -74,6 +76,7 @@ class ParallelIPPO(IPPO):
         data["global_step"] += env_id * self.max_steps
 
         observation = self.environment_reset(env=env)
+
 
         action, logprob, s_value = [{k: 0 for k in self.r_agents} for _ in range(3)]
         env_action, ep_reward = [np.zeros(self.n_agents) for _ in range(2)]
@@ -113,7 +116,7 @@ class ParallelIPPO(IPPO):
         # End of simulation
         data["reward_per_agent"] = ep_reward
         data["single_buffer"] = single_buffer
-        data["env_state"] = self.env.__dict__.items()
+        #data["env_state"] = self.env.__dict__.items()
         result[env_id] = data
 
     def _parallel_results(self, d, batch_size):
@@ -138,7 +141,7 @@ if __name__ == "__main__":
         "verbose": False,
         "tb_log": True,
         "tag": "tiny",
-        "env": "MultiAgentEthicalGathering-v1",
+        "env_name": "MultiAgentEthicalGathering-v1",
         "seed": 1,
         "max_steps": 500,
         "n_agents": 2,
@@ -173,9 +176,10 @@ if __name__ == "__main__":
         "anneal_entropy": True,
         "concavity_entropy": 3.5,
         "clip_vloss": True,
+        "log_gradients": False,
     }
 
-    ppo = IPPO(args, env=env)
+    ppo = ParallelIPPO(args, env=env)
     ppo.addCallbacks(PrintAverageReward(ppo, 300))
     ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.1, 3.5))
     ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))

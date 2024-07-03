@@ -6,13 +6,16 @@ import time
 import warnings
 
 from collections import deque
-from IndependentPPO.agent import SoftmaxActor, Critic, Agent
 
-from IndependentPPO.utils.memory import Buffer
-from IndependentPPO.utils.misc import *
+import numpy as np
+
+from agent import SoftmaxActor, Critic, Agent
+
+from utils.memory import Buffer
+from utils.misc import *
 import torch.nn as nn
-import IndependentPPO
-from IndependentPPO.callbacks import UpdateCallback, Callback
+import config
+from callbacks import UpdateCallback, Callback
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -97,7 +100,7 @@ class IPPO:
         elif type(args) is argparse.Namespace:
             args = args
         elif type(args) is str:
-            args = IndependentPPO.config.args_from_json(args)
+            args = config.args_from_json(args)
         self.init_args = args
 
         for k, v in self.init_args.__dict__.items():
@@ -279,7 +282,8 @@ class IPPO:
         observation = self.environment_reset()
 
         action, logprob, s_value = [{k: 0 for k in self.r_agents} for _ in range(3)]
-        env_action, ep_reward = [np.zeros(self.n_agents) for _ in range(2)]
+        env_action = np.zeros(self.n_agents)
+        ep_reward = [np.zeros(self.reward_shape) for _ in range(2)]
 
         for step in range(self.n_steps):
             self.run_metrics["global_step"] += 1
@@ -420,6 +424,7 @@ class IPPO:
 
         self.o_size = self.env.observation_space.sample().shape[0]
         self.a_size = self.env.action_space.n
+        self.reward_shape = (self.env.n_agents, self.env.reward_space.shape[0])
         # TODO: Set the action space, translate actions to env_actions
 
     def _finish_training(self):
