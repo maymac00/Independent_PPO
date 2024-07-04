@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from collections import deque
+from typing import List, Type, Dict
 
 import IndependentPPO.config as config
 from .agent import SoftmaxActor, Critic, LagrAgent
