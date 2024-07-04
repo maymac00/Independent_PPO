@@ -19,7 +19,6 @@ class LIPPO(IPPO):
 
     def __init__(self, args, env, run_name=None):
         super().__init__(args, env, run_name)
-
         #   Lexico params
         self.mu = [[0.0 for _ in range(self.reward_size - 1)] for _ in self.r_agents]
         self.j = [[0.0 for _ in range(self.reward_size - 1)] for _ in self.r_agents]

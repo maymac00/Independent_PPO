@@ -14,8 +14,12 @@ import numpy as np
 from .agent import SoftmaxActor, Critic, Agent
 
 from .utils.memory import Buffer
+from .utils.misc import *
+from .utils.memory import Buffer
 from .utils.misc import Array, set_torch, normalize, set_seeds
 import torch.nn as nn
+import IndependentPPO.config as config
+from .callbacks import UpdateCallback, Callback
 import torch as th
 import IndependentPPO.config as config
 from .callbacks import UpdateCallback, Callback
@@ -286,7 +290,7 @@ class IPPO:
 
         action, logprob, s_value = [{k: 0 for k in self.r_agents} for _ in range(3)]
         env_action = np.zeros(self.n_agents)
-        ep_reward = [np.zeros(self.reward_shape) for _ in range(2)]
+        ep_reward = np.zeros(self.n_agents)
 
         for step in range(self.n_steps):
             self.run_metrics["global_step"] += 1

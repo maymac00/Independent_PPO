@@ -47,7 +47,8 @@ class ParallelIPPO(IPPO):
             sim_metrics = self._parallel_results(d, batch_size)
 
             # We set the global env state of the environment to the first parallelized environment
-            #self.env.__dict__.update(d[0]["env_state"])
+            # This is important as it gets the wrappers info too.
+            self.env.__dict__.update(d[0]["env_state"])
             # Merge the results
             for k in self.r_agents:
                 buffs = [d[i]["single_buffer"][k] for i in range(batch_size)]
@@ -115,7 +116,7 @@ class ParallelIPPO(IPPO):
         # End of simulation
         data["reward_per_agent"] = ep_reward
         data["single_buffer"] = single_buffer
-        #data["env_state"] = self.env.__dict__.items()
+        data["env_state"] = self.env.__dict__.items()
         result[env_id] = data
 
     def _parallel_results(self, d, batch_size):
