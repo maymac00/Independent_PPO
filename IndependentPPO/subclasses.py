@@ -1,11 +1,10 @@
 import gym
-
-from IndependentPPO.IPPO import IPPO, _array_to_dict_tensor
+from .IPPO import IPPO, _array_to_dict_tensor
 import torch as th
 import warnings
 import numpy as np
 from torch.multiprocessing import Manager, Pool
-from IndependentPPO.utils.memory import merge_buffers, Buffer
+from .utils.memory import Buffer
 
 
 class ParallelIPPO(IPPO):

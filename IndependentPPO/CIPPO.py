@@ -5,20 +5,20 @@ import time
 from collections import deque
 
 import IndependentPPO.config as config
-from IndependentPPO.agent import SoftmaxActor, Critic, LagrAgent
+from .agent import SoftmaxActor, Critic, LagrAgent
 
-from IndependentPPO.utils.memory import LagrBuffer
-from IndependentPPO.utils.misc import *
+from .utils.memory import LagrBuffer
+from .utils.misc import *
 import torch.nn as nn
-from IndependentPPO.callbacks import UpdateCallback, Callback
+from .callbacks import UpdateCallback, Callback
 
-from IndependentPPO.IPPO import _array_to_dict_tensor
+from .IPPO import _array_to_dict_tensor
 import torch as th
 import warnings
 import numpy as np
 import multiprocessing as mp
 from multiprocessing import Manager
-from IndependentPPO.utils.memory import merge_buffers, Buffer
+from .utils.memory import merge_buffers, Buffer
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)

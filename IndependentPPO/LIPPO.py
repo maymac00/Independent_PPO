@@ -1,8 +1,6 @@
-import copy
-
 import gym
 
-from IPPO import IPPO, _array_to_dict_tensor
+from .IPPO import IPPO, _array_to_dict_tensor
 import time
 import torch as th
 import torch.nn as nn
@@ -11,10 +9,10 @@ import numpy as np
 from torch.multiprocessing import Manager, Pool
 from collections import deque
 
-from callbacks import UpdateCallback, PrintAverageRewardMO
-from utils.memory import merge_buffers, LexicBuffer
-from agent import Agent, SoftmaxActor, LexicCritic
-from utils.misc import normalize, set_seeds
+from .callbacks import UpdateCallback, PrintAverageRewardMO
+from .utils.memory import LexicBuffer
+from .agent import Agent, SoftmaxActor, LexicCritic
+from .utils.misc import normalize, set_seeds
 
 
 class LIPPO(IPPO):

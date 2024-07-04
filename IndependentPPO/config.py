@@ -3,7 +3,7 @@
 """
 import argparse
 import json
-from IndependentPPO.utils.misc import str2bool
+from .utils.misc import str2bool
 
 
 class CustomArgumentParser(argparse.ArgumentParser):

@@ -4,8 +4,8 @@ from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ActionSelection import *
-from utils.misc import *
+from .ActionSelection import *
+from .utils.misc import *
 
 ACTIONS = [0, 1, 2, 3, 4, 5, 6]
 

@@ -2,20 +2,23 @@ import argparse
 import copy
 import json
 import logging
+import os
 import time
 import warnings
 
 from collections import deque
+from typing import List, Type, Dict
 
 import numpy as np
 
-from agent import SoftmaxActor, Critic, Agent
+from .agent import SoftmaxActor, Critic, Agent
 
-from utils.memory import Buffer
-from utils.misc import *
+from .utils.memory import Buffer
+from .utils.misc import Array, set_torch, normalize, set_seeds
 import torch.nn as nn
-import config
-from callbacks import UpdateCallback, Callback
+import torch as th
+import IndependentPPO.config as config
+from .callbacks import UpdateCallback, Callback
 
 # The MA environment does not follow the gym SA scheme, so it raises lots of warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
