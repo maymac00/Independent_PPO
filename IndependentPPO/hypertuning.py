@@ -97,7 +97,7 @@ class OptunaOptimizer(abc.ABC):
                 # Handle other exceptions
                 self.study.tell(trial, state=optuna.trial.TrialState.FAIL)
                 print(f"Trial {i} failed with exception {e}.")
-                continue
+                raise e
 
             # Check that value is scalar
             if isinstance(value, list) or isinstance(value, tuple) or isinstance(value, np.ndarray):
