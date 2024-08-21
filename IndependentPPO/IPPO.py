@@ -229,22 +229,8 @@ class IPPO:
             for epoch in range(self.n_epochs * self.critic_times):
                 values = self.agents[k].critic(b['observations']).squeeze()
 
-                # Value clipping
-                if self.clip_vloss:
-                    v_loss_unclipped = (values - b['returns']) ** 2
 
-                    v_clipped = (th.clamp(values, b['values'] - self.clip, b['values'] + self.clip) - b['returns']) ** 2
-                    v_loss_clipped = th.min(v_loss_unclipped, v_clipped)
-
-                    # Log percent of clipped ratio
-                    update_metrics[f"Agent_{k}/Critic Clipped Ratio"] = ((values < (b['values'] - self.clip)).sum().item() + (
-                                values > (b['values'] + self.clip)).sum().item()) / np.prod(values.shape)
-
-                    critic_loss = 0.5 * v_loss_clipped.mean()
-                    update_metrics[f"Agent_{k}/Critic Loss Non-Clipped"] = critic_loss.detach()
-                else:
-                    # No value clipping
-                    critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
+                critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
 
                 update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
 
