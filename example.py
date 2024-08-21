@@ -4,21 +4,22 @@ pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
 """
 from EthicalGatheringGame.presets import tiny, large
 from EthicalGatheringGame.wrappers import NormalizeReward
+
+from IndependentPPO import LIPPO
 from IndependentPPO.subclasses import ParallelIPPO
 
-from IPPO import IPPO
-from CIPPO import CIPPO, ParallelCIPPO
-from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, AnnealActionFilter
-from lr_schedules import IndependentPPOAnnealing
+from IndependentPPO.IPPO import IPPO
+
+from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, AnnealActionFilter, PrintAverageRewardMO
+from IndependentPPO.lr_schedules import IndependentPPOAnnealing
 import gym
-import matplotlib
-from agent import Agent, LagrAgent
-from ActionSelection import FilterSoftmaxActionSelection
 
 # matplotlib.use("TkAgg")
-tiny["we"] = [1, 99]
+large["we"] = [1, 10]
+large["objective_order"] = "individual_first"
+large["color_by_efficiency"] = True
+large["reward_mode"] = "vectorial"
 env = gym.make("MultiAgentEthicalGathering-v1", **large)
-env = NormalizeReward(env)
 args = {
     "verbose": False,
     "tb_log": True,
@@ -62,23 +63,22 @@ args = {
     "mult_init": 0.5,
     "constr_limit_1": 3,
     "constr_limit_2": 3,
-    "anneal_action_filter": True,
+    "log_gradients": False,
+    "reward_size": 2,
+    "beta_values": [2, 1],
+    "eta_value": 0.1,
 }
 
-ppo = ParallelIPPO(args, env=env)
-# ppo = CIPPO(args, env=env)
+ppo = LIPPO(args, env=env)
 
 ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
-    0: {"actor_lr": 0.0003, "critic_lr": 0.004},
-    1: {"actor_lr": 0.0001, "critic_lr": 0.0005},
-    2: {"actor_lr": 0.0001, "critic_lr": 0.0005},
-    3: {"actor_lr": 0.0001, "critic_lr": 0.0005},
-    4: {"actor_lr": 0.0001, "critic_lr": 0.0005},
+    0: {"actor_lr": 0.0001, "critic_lr": 0.01},
+    1: {"actor_lr": 0.0001, "critic_lr": 0.01},
+    2: {"actor_lr": 0.0001, "critic_lr": 0.01},
+    3: {"actor_lr": 0.0001, "critic_lr": 0.01},
+    4: {"actor_lr": 0.0001, "critic_lr": 0.01},
 })
-ppo.addCallbacks(PrintAverageReward(ppo, 5, show_time=True))
-ppo.addCallbacks(AnnealEntropy(ppo, 1.0, 0.5, args["concavity_entropy"]))
-if args["anneal_action_filter"]:
-    ppo.addCallbacks(AnnealActionFilter(ppo))
+ppo.addCallbacks(PrintAverageRewardMO(ppo, 5, show_time=True))
 # ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
 # ppo.addCallbacks(SaveCheckpoint(ppo, 100))
 

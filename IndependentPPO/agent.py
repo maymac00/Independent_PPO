@@ -4,8 +4,8 @@ from torch.distributions import Normal
 import torch.nn as nn
 import torch.nn.functional as F
 
-from IndependentPPO.ActionSelection import *
-from IndependentPPO.utils.misc import *
+from .ActionSelection import *
+from .utils.misc import *
 
 ACTIONS = [0, 1, 2, 3, 4, 5, 6]
 
@@ -187,6 +187,11 @@ class Critic(nn.Module):
     def unfreeze(self):
         for param in self.parameters():
             param.requires_grad = True
+
+class LexicCritic(Critic):
+    def __init__(self, o_size: int, reward_size: int, h_size: int, h_layers: int):
+        super().__init__(o_size, h_size, h_layers)
+        self.output = Linear(h_size, reward_size, act_fn='linear')  # We output a vector of rewards
 
 
 class RecSoftmaxActor(SoftmaxActor):

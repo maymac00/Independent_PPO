@@ -3,7 +3,7 @@
 """
 import argparse
 import json
-from IndependentPPO.utils.misc import str2bool
+from .utils.misc import str2bool
 
 
 class CustomArgumentParser(argparse.ArgumentParser):
@@ -196,16 +196,6 @@ def args_from_json(directory):
     # Unkown arguments
     if unknown:
         print(f"Unknown arguments: {unknown}")
-
-    # Add unknown arguments to the args namespace
-    for arg in unknown:
-        # Split the argument on '=' sign if it's in key=value format
-        if '=' in arg:
-            key, value = arg.split('=', 1)
-            setattr(args, key.lstrip('-'), value)
-        else:
-            # For flag-like unknown arguments
-            setattr(args, arg.lstrip('-'), True)
 
     args = argparse.Namespace(**args)
     args.batch_size = int(1 * args.n_steps)

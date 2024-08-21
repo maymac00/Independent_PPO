@@ -4,7 +4,8 @@ This manages the memory buffer.
 """
 from copy import deepcopy
 
-from IndependentPPO.utils.misc import *
+import torch as th
+from torch import Tensor
 
 
 @th.jit.script
@@ -98,6 +99,43 @@ class Buffer:
         self.b_values = self.b_values.detach()
         self.b_dones = self.b_dones.detach()
 
+    def __add__(self, other):
+        """
+        Merge two buffers into a single one.
+
+        Args:
+            other (Buffer): Buffer to merge with.
+
+        Returns:
+            Buffer: Merged buffer.
+        """
+        # Get the device of the first buffer
+        device = self.device
+
+        # Instantiate the new merged buffer with the appropriate size
+        o_size = self.b_observations.shape[-1]
+        size = self.size + other.size
+        max_steps = self.max_steps
+        gamma = self.gamma
+        gae_lambda = self.gae_lambda
+
+        merged_buffer = Buffer(o_size, size, max_steps, gamma, gae_lambda, device)
+
+        # Concatenate the tensors
+        merged_buffer.b_observations = th.cat([self.b_observations, other.b_observations]).to(device)
+        merged_buffer.b_actions = th.cat([self.b_actions, other.b_actions]).to(device)
+        merged_buffer.b_logprobs = th.cat([self.b_logprobs, other.b_logprobs]).to(device)
+        merged_buffer.b_rewards = th.cat([self.b_rewards, other.b_rewards]).to(device)
+        merged_buffer.b_values = th.cat([self.b_values, other.b_values]).to(device)
+        merged_buffer.b_dones = th.cat([self.b_dones, other.b_dones]).to(device)
+
+        # Handle the indices correctly
+        merged_buffer.idx = size
+
+        return merged_buffer
+
+    def __radd__(self, other):
+        return self.__add__(other)
 
 class LagrBuffer(Buffer):
     def __init__(self, o_size: int, size: int, max_steps: int, gamma: float, gae_lambda: float, device: th.device):
@@ -153,6 +191,57 @@ class LagrBuffer(Buffer):
         self.b_costs_2 = self.b_costs_2.detach()
         self.b_cost_values_2 = self.b_cost_values_2.detach()
 
+
+class LexicBuffer(Buffer):
+    def __init__(self, o_size: int, reward_size: int, size: int, max_steps: int, gamma: float, gae_lambda: float,
+                 device: th.device):
+        super().__init__(o_size, size, max_steps, gamma, gae_lambda, device)
+        self.reward_size = reward_size
+        self.b_rewards = th.zeros((self.size, reward_size), dtype=th.float32).to(device)
+        self.b_values = deepcopy(self.b_rewards)
+        self.b_dones = deepcopy(self.b_rewards)
+
+    def sample(self):
+        n_episodes = int(self.size / self.max_steps)
+
+        return {
+            'observations': self.b_observations.reshape((n_episodes, self.max_steps, -1)),
+            'actions': self.b_actions.reshape((n_episodes, self.max_steps, -1)),
+            'logprobs': self.b_logprobs.reshape((n_episodes, self.max_steps)),
+            'values': self.b_values.reshape((n_episodes, self.max_steps, -1)),
+            'returns': self.returns.reshape((n_episodes, self.max_steps, -1)),
+            'advantages': self.advantages.reshape((n_episodes, self.max_steps, -1)),
+        }
+
+    def compute_mc(self, value_):
+        self.returns, self.advantages = compute_gae(self.b_values, value_.unsqueeze(0), self.b_rewards, self.b_dones, self.gamma,
+                                                    self.gae_lambda)
+
+    def __add__(self, other):
+        # Get the device of the first buffer
+        device = self.device
+
+        # Instantiate the new merged buffer with the appropriate size
+        o_size = self.b_observations.shape[-1]
+        size = self.size + other.size
+        max_steps = self.max_steps
+        gamma = self.gamma
+        gae_lambda = self.gae_lambda
+
+        merged_buffer = LexicBuffer(o_size, self.reward_size, size, max_steps, gamma, gae_lambda, device)
+
+        # Concatenate the tensors
+        merged_buffer.b_observations = th.cat([self.b_observations, other.b_observations]).to(device)
+        merged_buffer.b_actions = th.cat([self.b_actions, other.b_actions]).to(device)
+        merged_buffer.b_logprobs = th.cat([self.b_logprobs, other.b_logprobs]).to(device)
+        merged_buffer.b_rewards = th.cat([self.b_rewards, other.b_rewards]).to(device)
+        merged_buffer.b_values = th.cat([self.b_values, other.b_values]).to(device)
+        merged_buffer.b_dones = th.cat([self.b_dones, other.b_dones]).to(device)
+
+        # Handle the indices correctly
+        merged_buffer.idx = size
+
+        return merged_buffer
 
 def merge_buffers(buffers: list, lagr=False):
     """
