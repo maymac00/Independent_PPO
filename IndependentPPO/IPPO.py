@@ -239,8 +239,25 @@ class IPPO:
             for epoch in range(self.n_epochs * self.critic_times):
                 values = self.agents[k].critic(b['observations']).squeeze()
 
+                # Value clipping
+                if self.clip_vloss:
+                    v_loss_unclipped = (values - b['returns']) ** 2
 
-                critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
+                    v_clipped = (th.clamp(values, b['values'] - self.clip, b['values'] + self.clip) - b['returns']) ** 2
+                    v_loss_clipped = th.min(v_loss_unclipped, v_clipped)
+
+                    # Log percent of clipped ratio
+                    update_metrics[f"Agent_{k}/Critic Clipped Ratio"] = ((values < (
+                                b['values'] - self.clip)).sum().item() + (
+                                                                                 values > (b[
+                                                                                               'values'] + self.clip)).sum().item()) / np.prod(
+                        values.shape)
+
+                    critic_loss = 0.5 * v_loss_clipped.mean()
+                    update_metrics[f"Agent_{k}/Critic Loss Non-Clipped"] = critic_loss.detach()
+                else:
+                    # No value clipping
+                    critic_loss = 0.5 * ((values - b['returns']) ** 2).mean()
 
                 update_metrics[f"Agent_{k}/Critic Loss"] = critic_loss.detach()
 
@@ -253,10 +270,10 @@ class IPPO:
 
             loss = actor_loss - entropy_loss * self.entropy_value + critic_loss
             update_metrics[f"Agent_{k}/Loss"] = loss.detach().cpu()
-        self.update_metrics = update_metrics
-        mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in
-                              self.r_agents]).mean()
-        self.run_metrics["mean_loss"].append(mean_loss)
+            self.update_metrics = update_metrics
+            mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in
+                                  self.r_agents]).mean()
+            self.run_metrics["mean_loss"].append(mean_loss)
 
         # Run callbacks
         for c in IPPO.callbacks:
