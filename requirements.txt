@@ -1,6 +1,0 @@
-numpy~=1.26.1
-torch~=1.13.1
-gym~=0.26.2
-tensorboard~=2.14.1
-git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
-git+https://github.com/maymac00/ProximalPolicyOptimization.git

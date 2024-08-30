@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "IPPO"
+version = "0.1"
+description = "Implementation of independent learning based on my implementation of PPO"  # Optional, provide a brief description of your project
+authors = [{ name = "Arnau Mayoral", email = "arnau.mayoral@iiia.csic.es" }]  # Optional
+readme = "README.md"  # Optional
+license = { file = "LICENSE" }  # Optional, update based on your actual license
+requires-python = ">=3.11"  # Optional, adjust based on the minimum Python version you support
+
+dependencies = [
+    "gym==0.26.2",
+    "matplotlib",
+    "numpy==1.26.1",
+    "torch==1.13.1",
+    "tensorboard==2.14.1",
+    "PPO @ git+https://github.com/maymac00/ProximalPolicyOptimization.git",
+    "multiagentethicalgathering @ git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
