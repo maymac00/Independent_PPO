@@ -1,101 +1,52 @@
-"""
-Install MA ethical gathering game as test environment and its dependencies
-pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
-"""
-from EthicalGatheringGame.presets import tiny, large
-from EthicalGatheringGame.wrappers import NormalizeReward
-
-from IndependentPPO import LIPPO
-from IndependentPPO.subclasses import ParallelIPPO
-
-from IndependentPPO.IPPO import IPPO
-
-from IndependentPPO.callbacks import AnnealEntropy, PrintAverageReward, AnnealActionFilter, PrintAverageRewardMO
-from IndependentPPO.lr_schedules import IndependentPPOAnnealing
+import PPO as ppo
+import numpy as np
+import torch as th
+from EthicalGatheringGame.presets import tiny
 import gym
+from IndependentPPO.IPPO import IPPO
+import warnings
+warnings.filterwarnings("ignore")
 
-# matplotlib.use("TkAgg")
-large["we"] = [1, 10]
-large["objective_order"] = "individual_first"
-large["color_by_efficiency"] = True
-large["reward_mode"] = "vectorial"
-env = gym.make("MultiAgentEthicalGathering-v1", **large)
-args = {
-    "verbose": False,
-    "tb_log": True,
-    "tag": "tiny",
-    "env_name": "MultiAgentEthicalGathering-v1",
-    "seed": 1,
-    "max_steps": 500,
-    "n_agents": 5,
-    "n_steps": 2500,
-    "tot_steps": 5000000,
-    "save_dir": "example_data",
-    "early_stop": 15000,
-    "past_actions_memory": 0,
-    "clip": 0.2,
-    "target_kl": None,
-    "gamma": 0.8,
-    "gae_lambda": 0.95,
-    "ent_coef": 0.04,
-    "v_coef": 0.5,
-    "actor_lr": 0.0003,
-    "critic_lr": 0.001,
-    "anneal_lr": True,
-    "n_epochs": 10,
-    "norm_adv": True,
-    "max_grad_norm": 1.0,
-    "critic_times": 1,
-    "h_size": 256,
-    "last_n": 500,
-    "n_cpus": 8,
-    "th_deterministic": True,
-    "cuda": False,
-    "batch_size": 2500,
-    "parallelize": True,
-    "n_envs": 5,
-    "h_layers": 3,
-    "load": None,
-    "anneal_entropy": True,
-    "concavity_entropy": 1.8,
-    "clip_vloss": True,
-    "mult_lr": 0.01,
-    "mult_init": 0.5,
-    "constr_limit_1": 3,
-    "constr_limit_2": 3,
-    "log_gradients": False,
-    "reward_size": 2,
-    "beta_values": [2, 1],
-    "eta_value": 0.1,
-}
+if __name__ == '__main__':
 
-ppo = LIPPO(args, env=env)
+    tiny["we"] = [1, 10]
+    tiny["objective_order"] = "individual_first"
+    tiny["color_by_efficiency"] = True
+    tiny["reward_mode"] = "scalarised"
+    env = gym.make("MultiAgentEthicalGathering-v1", **tiny)
+    total_steps = int(3e6)
+    batch_size = 5000
 
-ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
-    0: {"actor_lr": 0.0001, "critic_lr": 0.01},
-    1: {"actor_lr": 0.0001, "critic_lr": 0.01},
-    2: {"actor_lr": 0.0001, "critic_lr": 0.01},
-    3: {"actor_lr": 0.0001, "critic_lr": 0.01},
-    4: {"actor_lr": 0.0001, "critic_lr": 0.01},
-})
-ppo.addCallbacks(PrintAverageRewardMO(ppo, 5, show_time=True))
-# ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
-# ppo.addCallbacks(SaveCheckpoint(ppo, 100))
+    agents = []
+    for i in range(2):
+        agents.append(ppo.PPOAgent(
+            ppo.SoftmaxActor(env.observation_space.shape[0], 7, 256, 2),
+            ppo.Critic(env.observation_space.shape[0], 256, 2),
+            ppo.Buffer(env.observation_space.shape[0], batch_size, 500, 0.8, 0.95, th.device('cpu'))
+        ))
+        agents[-1].lr_scheduler = ppo.DefaultLrAnneal(agents[-1], total_steps // batch_size)
 
-import time
 
-t0 = time.time()
-ppo.train()
-t = time.time() - t0
-print(f"Steps per second: {ppo.tot_steps / t}")
+    class GatheringIPPO(IPPO):
 
-agents = IPPO.actors_from_file("example_data/tiny/2500_5_1")
+        def rollout(self):
+            obs = self.env.reset(seed=0)[0]
+            score = np.array([0.] * self.n_agents)
+            eps = 0
+            for step in range(batch_size):
+                actions = [agent.get_action(obs[k]) for k, agent in enumerate(self.agents)]
+                state, reward, done, info = env.step(actions)
 
-# Run a simulation of the trained agents
-obs, info = env.reset()
-done = False
-while not done:
-    actions = [agent.predict(obs[i]) for i, agent in enumerate(agents)]
-    obs, rewards, done, info = env.step(actions)
-    done = all(done)
-    env.render()
+                for k, agent in enumerate(self.agents):
+                    agent.store_transition(reward[k], done[k])
+
+                score += reward
+                if all(done):
+                    eps += 1
+                    obs = env.reset(seed=0)[0]
+            print(f"Mean Return: {score / eps}")
+
+
+    ippo = GatheringIPPO(agents, env, total_steps, batch_size)
+    ippo.train()
+    ippo.save(f"example_models/{ippo.run_name}")

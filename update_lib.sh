@@ -1,4 +1,5 @@
 #!/bin/bash
-source /home/arnau/tools/python_venv/IndependentPPO/bin/activate
 pip uninstall multiagentethicalgathering
+pip uninstall ppo
 pip install git+https://github.com/maymac00/MultiAgentEthicalGatheringGame.git
+pip install git+https://github.com/maymac00/ProximalPolicyOptimization.git
