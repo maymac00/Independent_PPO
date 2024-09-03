@@ -1,8 +1,5 @@
 import abc
 import time
-import PPO as ppo
-import numpy as np
-import torch as th
 from PPO import PPOAgentExtraInfo, PPOAgent
 
 from .callbacks import CallbackI, UpdateCallback
@@ -10,12 +7,13 @@ from .callbacks import CallbackI, UpdateCallback
 
 class IPPO(abc.ABC):
 
-    def __init__(self, agents: list[ppo.PPOAgent] | list[ppo.PPOAgentExtraInfo], env, tot_steps, batch_size, **kwargs):
+    def __init__(self, agents: list[PPOAgent] | list[PPOAgentExtraInfo], env, tot_steps, batch_size, **kwargs):
         self.agents = agents
         self.env = env
         self.total_steps = tot_steps
         self.batch_size = batch_size
         self.n_agents = len(agents)
+        self.n_updates = tot_steps // batch_size
         self.update_count = 0
 
         self.callbacks = []
@@ -52,6 +50,7 @@ class IPPO(abc.ABC):
         Returns
         -------
         """
+        self.update_count = 0
         for update in range(1, self.total_steps // self.batch_size + 1):
             self.rollout()
             obs = self.env.reset()[0]
@@ -66,6 +65,8 @@ class IPPO(abc.ABC):
             for callback in self.callbacks:
                 if isinstance(callback, UpdateCallback):
                     callback.after_update()
+
+            self.update_count += 1
 
 
     def save(self, path, save_critic=False):

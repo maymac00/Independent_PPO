@@ -5,7 +5,6 @@ from EthicalGatheringGame import MAEGG
 from EthicalGatheringGame.presets import large
 import gym
 from PPO.callbacks import AnnealEntropyCallback
-from gym.envs.toy_text.blackjack import score
 from torch import nn
 
 from IndependentPPO.IPPO import IPPO
@@ -14,7 +13,9 @@ import warnings
 from IndependentPPO.IPPO import IPPO
 import warnings
 from collections import deque
-from IndependentPPO.callbacks import TensorBoardCallback
+
+from IndependentPPO.ParallelIPPO import ParallelIPPO
+from IndependentPPO.callbacks import TensorBoardCallback, PrintInfo
 
 warnings.filterwarnings("ignore")
 
@@ -66,16 +67,18 @@ if __name__ == '__main__':
 
 
     class GatheringIPPO(IPPO):
+        def get_obs_and_extra_info(self, state, recent_action):
+            obs = [th.Tensor(ag_obs['image']) for ag_obs in state]
+            extra_info = [
+                th.Tensor([s['donation_box'], s['survival_status'], *past_actions])
+                for s, past_actions in zip(state, recent_action)]
+            return obs, extra_info
 
         def rollout(self):
             score = np.array([0.] * self.n_agents)
             state = env.reset(seed=0)[0]
-            obs = [th.Tensor(ag_obs['image']) for ag_obs in state]
             recent_action = [deque([4.0 / 6] * 5, maxlen=5)] * self.n_agents
-            extra_info = [
-                th.Tensor([s['donation_box'], s['survival_status'], *past_actions])
-                for s, past_actions in zip(state, recent_action)]
-
+            obs, extra_info = self.get_obs_and_extra_info(state, recent_action)
             eps = 0
             for step in range(batch_size):
                 actions = []
@@ -86,10 +89,7 @@ if __name__ == '__main__':
 
                 state, reward, done, info = env.step(actions)
 
-                obs = [th.Tensor(ag_obs['image']) for ag_obs in state]
-                extra_info = [
-                    th.Tensor([s['donation_box'], s['survival_status'], *past_actions])
-                    for s, past_actions in zip(state, recent_action)]
+                obs, extra_info = self.get_obs_and_extra_info(state, recent_action)
 
                 for i, agent in enumerate(self.agents):
                     agent.store_transition(reward[i], done[i])
@@ -98,11 +98,8 @@ if __name__ == '__main__':
                 if all(done):
                     eps += 1
                     state = env.reset(seed=0)[0]
-                    obs = [th.Tensor(ag_obs['image']) for ag_obs in state]
                     recent_action = [deque([4.0 / 6] * 5, maxlen=5)] * self.n_agents
-                    extra_info = [
-                        th.Tensor([s['donation_box'], s['survival_status'], *past_actions])
-                        for s, past_actions in zip(state, recent_action)]
+                    obs, extra_info = self.get_obs_and_extra_info(state, recent_action)
             print(f"Mean Return: {score / eps}")
 
         def update_agent(self, agent: ppo.PPOAgentExtraInfo, obs, cat=None, **kwargs):
@@ -110,10 +107,50 @@ if __name__ == '__main__':
             sample_extra_info = th.Tensor([obs['donation_box'], obs['survival_status'], *recent_action])
             agent.update(obs["image"], cat=sample_extra_info)
 
+    class GatheringParallelIPPO(ParallelIPPO):
+        def get_obs_and_extra_info(self, state, recent_action):
+            obs = [th.Tensor(ag_obs['image']) for ag_obs in state]
+            extra_info = [
+                th.Tensor([s['donation_box'], s['survival_status'], *past_actions])
+                for s, past_actions in zip(state, recent_action)]
+            return obs, extra_info
 
+        def _single_rollout(self, agents, env):
+            score = np.array([0.] * self.n_agents)
+            state = env.reset(seed=0)[0]
+            recent_action = [deque([4.0 / 6] * 5, maxlen=5)] * self.n_agents
+            obs, extra_info = self.get_obs_and_extra_info(state, recent_action)
+            eps = 0
+            for step in range(self.batch_size_for_worker):
+                actions = []
+                for i, ag in enumerate(self.agents):
+                    action = ag.get_action(obs[i], cat=extra_info[i])
+                    recent_action[i].append(action / 6.)
+                    actions.append(action)
+
+                state, reward, done, info = env.step(actions)
+
+                obs, extra_info = self.get_obs_and_extra_info(state, recent_action)
+
+                for i, agent in enumerate(self.agents):
+                    agent.store_transition(reward[i], done[i])
+
+                score += reward
+                if all(done):
+                    eps += 1
+
+        def update_agent(self, agent: ppo.PPOAgentExtraInfo, obs, cat=None, **kwargs):
+            recent_action = deque([4.0 / 6] * 5, maxlen=5)
+            sample_extra_info = th.Tensor([obs['donation_box'], obs['survival_status'], *recent_action])
+            agent.update(obs["image"], cat=sample_extra_info)
+
+
+
+    # ippo = GatheringIPPO(agents, env, total_steps, batch_size)
     ippo = GatheringIPPO(agents, env, total_steps, batch_size)
-    ippo.add_callbacks(
-        [TensorBoardCallback(ippo, "tb_cnn_example_data", 1)]
-    )
+    ippo.add_callbacks([
+        # TensorBoardCallback(ippo, "tb_cnn_example_data", 1),
+        PrintInfo(ippo, 1)
+    ])
     ippo.train()
     ippo.save(f"example_models/{ippo.run_name}")

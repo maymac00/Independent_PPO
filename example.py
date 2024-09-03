@@ -4,6 +4,8 @@ import torch as th
 from EthicalGatheringGame.presets import tiny
 import gym
 from IndependentPPO.IPPO import IPPO
+from IndependentPPO.ParallelIPPO import ParallelIPPO
+from IndependentPPO.callbacks import TensorBoardCallback, PrintInfo
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -15,7 +17,7 @@ if __name__ == '__main__':
     tiny["reward_mode"] = "scalarised"
     env = gym.make("MultiAgentEthicalGathering-v1", **tiny)
     total_steps = int(3e6)
-    batch_size = 5000
+    batch_size = 2000
 
     agents = []
     for i in range(2):
@@ -46,7 +48,29 @@ if __name__ == '__main__':
                     obs = env.reset(seed=0)[0]
             print(f"Mean Return: {score / eps}")
 
+    class GatheringParallelIPPO(ParallelIPPO):
 
-    ippo = GatheringIPPO(agents, env, total_steps, batch_size)
+        def _single_rollout(self, agents, env):
+            obs = env.reset()[0]
+            score = np.array([0.] * self.n_agents)
+            eps = 0
+            for step in range(self.batch_size_for_worker):
+                actions = [agent.get_action(obs[k]) for k, agent in enumerate(agents)]
+                state, reward, done, info = env.step(actions)
+
+                for k, agent in enumerate(agents):
+                    agent.store_transition(reward[k], done[k])
+
+                score += reward
+                if all(done):
+                    eps += 1
+                    obs = env.reset()[0]
+                    break
+            pass
+
+    ippo = GatheringParallelIPPO(agents, env, total_steps, batch_size)
+    ippo.add_callbacks([
+        PrintInfo(ippo, 1),
+    ])
     ippo.train()
     ippo.save(f"example_models/{ippo.run_name}")
