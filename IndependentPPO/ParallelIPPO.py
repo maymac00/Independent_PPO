@@ -10,13 +10,13 @@ import torch as th
 from collections import deque
 
 from .callbacks import UpdateCallback
+from contextlib import contextmanager
 
 
 class ParallelIPPO(IPPO, abc.ABC):
-    # Message types
-    ROLL = 0
     def __init__(self, agents: list[PPOAgent] | list[PPOAgentExtraInfo], env, tot_steps, batch_size, **kwargs):
         super().__init__(agents, env, tot_steps, batch_size, **kwargs)
+        self.n_cpus = mp.cpu_count()
         self.n_workers = min(self.n_agents, mp.cpu_count())
         print("Number of workers: ", self.n_workers)
 
@@ -24,6 +24,16 @@ class ParallelIPPO(IPPO, abc.ABC):
         # Change the size of each agent buffer
         for ag in self.agents:
             ag.buffer.resize(self.batch_size_for_worker)
+
+    @contextmanager
+    def set_torch_threads(self, num_threads):
+        """Context manager to temporarily set the number of threads for PyTorch."""
+        original_threads = th.get_num_threads()
+        th.set_num_threads(num_threads)
+        try:
+            yield
+        finally:
+            th.set_num_threads(original_threads)
 
     def rollout(self):
         raise NotImplementedError("Parallel IPPO does not use this method.")
@@ -55,6 +65,7 @@ class ParallelIPPO(IPPO, abc.ABC):
                     buffers.append(buffer_queues.get())
 
                 if len(buffers) >= self.n_workers:
+                    th.set_num_threads(self.n_cpus - self.n_workers)
                     for k, ag in enumerate(self.agents):
                         ag.buffer = sum([buffers[i][k] for i in range(1, self.n_workers)], buffers[0][k])
                     self.update_count += 1
@@ -66,8 +77,10 @@ class ParallelIPPO(IPPO, abc.ABC):
                             callback.before_update()
 
                     obs = self.env.reset()[0]
+                    th.set_num_threads(self.n_cpus-self.n_workers)
                     for i, agent in enumerate(self.agents):
                         self.update_agent(agent, obs[i])
+
 
                     for callback in self.callbacks:
                         if isinstance(callback, UpdateCallback):
@@ -78,6 +91,7 @@ class ParallelIPPO(IPPO, abc.ABC):
                              "critics": [ag.critic.state_dict() for ag in self.agents]}
                     for i in range(self.n_workers):
                         model_queues.put(model)
+                    th.set_num_threads(1)
 
             except KeyboardInterrupt:
                 break
@@ -93,31 +107,33 @@ class ParallelIPPO(IPPO, abc.ABC):
         Parameters
         """
 
-        th.set_num_threads(1)
         np.random.seed(worker_id)
 
-        waiting_model = False
-        while True:
-            try:
-                # get updated model weights
-                model = model_queues.get_nowait()
-                for i, ag in enumerate(self.agents):
-                    ag.actor.load_state_dict(model["actors"][i])
-                    ag.critic.load_state_dict(model["critics"][i])
-                waiting_model = False
-            except Exception as e:
-                if waiting_model:
-                    continue
+        with self.set_torch_threads(1):
 
-            # Clear the buffers
-            for ag in self.agents:
-                ag.buffer.clear()
+            waiting_model = False
+            while True:
+                try:
+                    # get updated model weights
+                    model = model_queues.get_nowait()
+                    for i, ag in enumerate(self.agents):
+                        ag.actor.load_state_dict(model["actors"][i])
+                        ag.critic.load_state_dict(model["critics"][i])
+                    waiting_model = False
+                except Exception as e:
+                    if waiting_model:
+                        continue
 
-            self._single_rollout(self.agents, self.env)
-            # add dict of buffers to queue
-            buffer_queues.put({i: ag.buffer for i, ag in enumerate(self.agents)})
-            waiting_model = True
-            pass
+                # Clear the buffers
+                for ag in self.agents:
+                    ag.buffer.clear()
+
+
+                self._single_rollout(self.agents, self.env)
+                # add dict of buffers to queue
+                buffer_queues.put({i: ag.buffer for i, ag in enumerate(self.agents)})
+                waiting_model = True
+                pass
 
 
     @abc.abstractmethod

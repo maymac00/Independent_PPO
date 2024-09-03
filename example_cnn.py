@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
 
     # ippo = GatheringIPPO(agents, env, total_steps, batch_size)
-    ippo = GatheringIPPO(agents, env, total_steps, batch_size)
+    ippo = GatheringParallelIPPO(agents, env, total_steps, batch_size)
     ippo.add_callbacks([
         # TensorBoardCallback(ippo, "tb_cnn_example_data", 1),
         PrintInfo(ippo, 1)
