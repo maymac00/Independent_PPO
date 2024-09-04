@@ -21,7 +21,7 @@ class PrintInfo(UpdateCallback):
 
     def before_update(self):
         t1 = time.time()
-        if self.ippo.update_count % self.freq == 0:
+        if self.ippo.update_count % self.freq == 0 and self.ippo.update_count > 0:
             rewards = np.array([0.] * self.ippo.n_agents)
 
             for i, ag in enumerate(self.ippo.agents):
