@@ -270,10 +270,10 @@ class IPPO:
 
             loss = actor_loss - entropy_loss * self.entropy_value + critic_loss
             update_metrics[f"Agent_{k}/Loss"] = loss.detach().cpu()
-            self.update_metrics = update_metrics
-            mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in
-                                  self.r_agents]).mean()
-            self.run_metrics["mean_loss"].append(mean_loss)
+        self.update_metrics = update_metrics
+        mean_loss = np.array([self.update_metrics[f"Agent_{k}/Loss"] if not self.agents[k].isFrozen() else 0 for k in
+                              self.r_agents]).mean()
+        self.run_metrics["mean_loss"].append(mean_loss)
 
         # Run callbacks
         for c in IPPO.callbacks:

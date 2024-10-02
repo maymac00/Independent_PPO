@@ -18,7 +18,7 @@ import gym
 large["we"] = [1, 10]
 large["objective_order"] = "individual_first"
 large["color_by_efficiency"] = True
-large["reward_mode"] = "vectorial"
+large["reward_mode"] = "scalarised"
 env = gym.make("MultiAgentEthicalGathering-v1", **large)
 args = {
     "verbose": False,
@@ -69,7 +69,7 @@ args = {
     "eta_value": 0.1,
 }
 
-ppo = LIPPO(args, env=env)
+ppo = ParallelIPPO(args, env=env)
 
 ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
     0: {"actor_lr": 0.0001, "critic_lr": 0.01},
@@ -78,7 +78,7 @@ ppo.lr_scheduler = IndependentPPOAnnealing(ppo, {
     3: {"actor_lr": 0.0001, "critic_lr": 0.01},
     4: {"actor_lr": 0.0001, "critic_lr": 0.01},
 })
-ppo.addCallbacks(PrintAverageRewardMO(ppo, 5, show_time=True))
+ppo.addCallbacks(PrintAverageReward(ppo, 5, show_time=True))
 # ppo.addCallbacks(TensorBoardLogging(ppo, "example_data"))
 # ppo.addCallbacks(SaveCheckpoint(ppo, 100))
 
